@@ -1323,7 +1323,7 @@ function drawHojas(){
     const k=`${g.fecha}|${esc(g.placa)}|${g.viaje}`, ap=aprobada({fecha:g.fecha,placa:g.placa,viaje:g.viaje});
     const con=g.hojas.filter(conDatos), listo=con.length&&con.every(h=>h.estado==="cerrada");
     if(ap) return `<div class="nxt"><button class="btn sec" data-gdesp="${k}">Ver despacho aprobado ›</button></div>`;
-    if(listo&&can("aprobar")) return `<div class="nxt"><button class="btn" data-gdesp="${k}">Terminé con este despacho ›</button><div class="muted">Ya no faltan puertas. Siga para generar el despacho.</div></div>`;
+    if(listo&&can("aprobar")) return `<div class="nxt"><button class="btn" data-gdesp="${k}">Terminé con este despacho ›</button><div class="muted">Si no pesa en otra puerta, siga para generar el despacho.</div></div>`;
     if(con.length) return `<div class="nxt"><div class="muted">Falta terminar el pesaje de las puertas que siguen abiertas.</div></div>`;
     return "";
   };
@@ -1457,7 +1457,9 @@ function drawOp(){
     box.innerHTML=`<div style="margin:6px 0"><button class="btn sec sm" data-op="inicio">← Atrás</button></div>
       <div class="card"><div class="tk" style="border:0;padding:0;margin:0;background:none"><div class="p">${esc(c.placa)}${multi?`<span class="bdg ab">Viaje ${c.viaje}</span>`:""}</div>
       <div class="m">${esc(d.empresa||"")}${d.conductor?" · "+esc(d.conductor):""}${horaTxt(d.hora)?" · llegó "+esc(horaTxt(d.hora)):""}</div></div></div>
-      <div class="opt">Toque la puerta donde va a pesar<div class="muted" style="font-weight:400;margin-top:2px">Puede ser una sola o varias.</div></div>
+      ${(()=>{ const con=c.hojas.filter(h=>(h.pesadas||[]).length), hecho=con.length&&con.every(h=>h.estado==="cerrada");
+        return hecho?`<div class="opt">✓ Pesaje terminado en ${con.map(h=>esc(h.puerta)).join(", ")}<div class="muted" style="font-weight:400;margin-top:2px">Si este despacho no pasa por otra puerta, ya terminó y sus datos se envían solos. Si pasa por otra, toque esa puerta.</div></div>`
+          :`<div class="opt">Toque la puerta donde va a pesar<div class="muted" style="font-weight:400;margin-top:2px">Puede ser una sola o varias.</div></div>`; })()}
       <div class="doors">${CFG.PUERTAS.map(p=>{ const h=hojaDe(c,p), aj=h&&ajena(h);
         const sub=h?`${fmt(kgHoja(h))} kg · ${(h.pesadas||[]).length} pesada${(h.pesadas||[]).length===1?"":"s"}${h.estado==="cerrada"?" · terminada":" · en curso"}${aj?" · "+esc(h.responsable):""}`:"Sin pesar todavía";
         return `<button class="door ${h?(h.estado==="cerrada"?"ce":"has"):""} ${aj?"lock":""}" data-door="${esc(p)}"><span><b>${esc(p)}</b><small>${sub}</small></span><span class="go">›</span></button>`; }).join("")}</div>
