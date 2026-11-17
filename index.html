@@ -486,6 +486,7 @@ body{background:var(--bg)}
 .mcard.soon .ic{background:#d9cfc4}
 body.inmenu .tabs{display:none}
 body.inmenu #app{margin:0 auto!important;max-width:1000px!important}
+.navmenu::before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 5l-7 7 7 7'/%3E%3C/svg%3E')!important;mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 5l-7 7 7 7'/%3E%3C/svg%3E')!important}
 .navmenu{font-weight:600;border:1px solid rgba(255,255,255,.35)!important}
 .navlogo,.navcol{display:none}
 @media(min-width:1024px){
@@ -591,7 +592,7 @@ input[type=date].in,input[type=time].in{font-variant-numeric:tabular-nums}
 
   <div class="tabs noprint">
     <div class="navlogo"><img src="img/logo.png" alt="Machu Picchu Foods"><div><b>Gestión de residuos</b><small>Sistema de Gestión Ambiental</small></div></div>
-    <button class="tab navmenu hidden" id="tab-menu" data-menu="1" type="button">← Menú principal</button>
+    <button class="tab navmenu hidden" id="tab-menu" data-menu="1" type="button">Menú principal</button>
     <button class="tab on" data-tab="hoja">Pesaje</button>
     <button class="tab" data-tab="desp">Despacho (SGA.R.G.001)</button>
     <button class="tab hidden" data-tab="cat" id="tab-cat">Catálogo</button>
@@ -611,6 +612,7 @@ input[type=date].in,input[type=time].in{font-variant-numeric:tabular-nums}
         <button class="btn" id="b-new">+ Iniciar despacho</button>
         <div class="card newcard" id="n-card">
           <h2>Iniciar despacho</h2>
+          <div class="plwrap"></div>
           <label class="f">Puerta</label>
           <div class="seg" id="n-puerta"></div>
           <label class="f" for="n-fecha">Fecha</label>
@@ -1186,7 +1188,6 @@ function showView(){
   const tOn=document.querySelector(".tab.on");      // título de la sección en uso (solo presentación)
   $("#ptitle").textContent = (TAB==="desp"&&SIMPLE()) ? "Despacho" : inHoja ? (SIMPLE()?"Pesaje":"Hoja de pesaje") : (SIMPLE()?"Pesaje de residuos":(tOn?tOn.textContent.trim():"Gestión de residuos sólidos"));
   if(enMenu) $("#ptitle").textContent="Menú principal";
-  $("#sub").style.display=(MOD==="rs"&&!enMenu)?"":"none";   // selector de planta solo en Gestión de residuos
   if(TAB==="hall"){ $("#ptitle").textContent="Hallazgos ambientales"; if(typeof drawHall==="function") drawHall(); }
   if(TAB==="are"){ $("#ptitle").textContent="Áreas"; if(typeof drawAreas==="function") drawAreas(); }
   window.scrollTo(0,0);
@@ -1212,9 +1213,10 @@ async function cargaPlantas(){
   }catch(e){}
 }
 function drawPlantaSel(){
-  const A=plantasAct(), s=$("#sub");
-  if(A.length>1) s.innerHTML=`<select id="pl-sel" aria-label="Planta">${A.map(p=>`<option${p.planta===CFG.PLANTA?" selected":""}>${esc(p.planta)}</option>`).join("")}</select>`;
-  else s.textContent=CFG.PLANTA;
+  const A=plantasAct();
+  $("#sub").textContent=CFG.PLANTA;
+  const html=A.length>1?`<label class="f">Planta</label><select class="in pl-sel" aria-label="Planta">${A.map(p=>`<option${p.planta===CFG.PLANTA?" selected":""}>${esc(p.planta)}</option>`).join("")}</select>`:"";
+  $$(".plwrap").forEach(w=>w.innerHTML=html);
 }
 function cambiaPlanta(n){
   if(n===CFG.PLANTA) return;
@@ -1488,6 +1490,7 @@ function drawOpNuevo(){
   const placas=[...new Set(CFG.PLACAS.concat(Object.keys(LS.get(VEHS,{}))))];
   $("#op-body").innerHTML=`<div style="margin:6px 0"><button class="btn sec sm" data-op="inicio">← Atrás</button></div>
     <div class="card opf"><h2>Iniciar despacho</h2>
+      <div class="plwrap"></div>
       <label class="f" for="op-placa">Placa del vehículo</label>
       <input id="op-placa" class="in placa" list="dl-op" autocapitalize="characters" autocomplete="off" placeholder="ABZ-937"><datalist id="dl-op">${placas.map(p=>`<option value="${esc(p)}">`).join("")}</datalist>
       <div class="vehya hidden" id="op-ya"></div>
@@ -1499,6 +1502,7 @@ function drawOpNuevo(){
       <div><label class="f" for="op-hora">Hora de llegada</label><input id="op-hora" class="in" type="time" value="${horaAhora()}"></div></div>
       <div class="err" id="op-err"></div>
       <div class="row2" style="margin-top:10px"><button class="btn sec" data-op="inicio">Cancelar</button><button class="btn" data-op="seguir">Continuar</button></div></div>`;
+  drawPlantaSel();
   $("#dl-emp").innerHTML=(CFG.EMPRESAS.length?CFG.EMPRESAS:EMPRESAS_BASE).map(p=>`<option value="${esc(p)}">`).join("");
   $("#dl-cond").innerHTML=[...new Set(Object.values(LS.get(VEHS,{})).map(v=>v.conductor))].map(c=>`<option value="${esc(c)}">`).join("");
   ["#op-emp","#op-cond","#op-brev"].forEach(i=>$(i).addEventListener("input",()=>{ $(i).dataset.auto="0"; }));
@@ -2460,7 +2464,7 @@ $("#u-list").addEventListener("change",ev=>{ const sel=ev.target.closest("[data-
     const L=todas&&todas.checked?["*"]:[...$("#u-list").querySelectorAll("[data-upl]")].filter(i=>i.dataset.upl===u&&i.checked&&i.value!=="*").map(i=>i.value);
     if(!L.length){ pl.checked=true; return toast("Cada usuario necesita al menos una planta."); }
     usrOp({action:"usuario_editar",usuario:u,plantas:L},"Plantas actualizadas."); } });
-$("#sub").addEventListener("change",ev=>{ if(ev.target.id==="pl-sel") cambiaPlanta(ev.target.value); });
+document.addEventListener("change",ev=>{ if(ev.target.classList&&ev.target.classList.contains("pl-sel")) cambiaPlanta(ev.target.value); });
 $("#pl-crear").addEventListener("click",crearPlanta);
 $("#f-save").addEventListener("click",()=>{ const a=$("#f-apr").value.trim();
   if(!/^\d{2}\/\d{2}\/\d{4}$/.test(a)) return void($("#f-err").textContent=ERR_FMT.fecha_invalida);
