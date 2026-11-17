@@ -624,9 +624,9 @@ input[type=date].in,input[type=time].in{font-variant-numeric:tabular-nums}
     <div class="kpis" id="kpis"></div>
     <div class="homegrid">
       <div>
-        <button class="btn" id="b-new">+ Nuevo vehículo</button>
+        <button class="btn" id="b-new">+ Iniciar despacho</button>
         <div class="card newcard" id="n-card">
-          <h2>Nuevo vehículo</h2>
+          <h2>Iniciar despacho</h2>
           <div class="fhd"><i>1</i>Datos del despacho</div>
           <div class="plwrap"></div>
           <label class="f">Puerta</label>
@@ -1369,7 +1369,7 @@ async function startHoja(viajeFijo){
   let v;
   if(viajeFijo){
     v=vj(viajeFijo); await aprobFresco({fecha,placa,viaje:v});
-    if(aprobada({fecha,placa,viaje:v})) return void(e.textContent="El Viaje "+v+" de "+placa+" ya fue aprobado. Si el vehículo volvió a llegar, use «Nuevo vehículo».");
+    if(aprobada({fecha,placa,viaje:v})) return void(e.textContent="El Viaje "+v+" de "+placa+" ya fue aprobado. Si el vehículo volvió a llegar, use «Iniciar despacho».");
   } else {
     // viaje vigente = el último de este vehículo en la fecha; si ya está aprobado, se propone un viaje nuevo
     const v0=Math.max(1,...locV); v=v0;
@@ -1471,9 +1471,9 @@ function drawOp(){
       :`<button class="btn" data-tk="${esc(c.k)}">Continuar pesado</button>`;
     return `<div class="tkc"><div class="tkh" data-tk="${esc(c.k)}"><div class="p">${esc(c.placa)}${c.viaje>1?`<span class="bdg ab">Viaje ${c.viaje}</span>`:""}${tag}</div>
       <div class="m">${esc(d.empresa||"")}${d.empresa?" · ":""}${est}${!con.length&&horaTxt(d.hora)?" · llegó "+esc(horaTxt(d.hora)):""}</div><div class="pchs">${chipsPuertas(c)}</div></div>${btn}</div>`; };
-  box.innerHTML=`<button class="btn xl" data-op="nuevo" style="margin-top:6px">＋ Nuevo vehículo</button>
+  box.innerHTML=`<button class="btn xl" data-op="nuevo" style="margin-top:6px">＋ Iniciar despacho</button>
     <div class="opt">Pendientes${lista.length?` (${lista.length})`:""}</div>`+
-    (lista.length?lista.map(card).join(""):`<div class="card muted">No hay camiones pendientes. Cuando llegue uno, toque «Nuevo vehículo».</div>`)+
+    (lista.length?lista.map(card).join(""):`<div class="card muted">No hay camiones pendientes. Cuando llegue uno, toque «Iniciar despacho».</div>`)+
     (aps.length?`<div class="opt">Aprobados hoy (${aps.length})</div>`+aps.map(c=>`<button class="aprow" data-gdesp="${esc(c.k)}"><b>${esc(c.placa)}</b><span class="k">${N[dkey(c.fecha,c.placa,c.viaje)]?numReg(N[dkey(c.fecha,c.placa,c.viaje)])+" · ":""}${fmt(kgC(c))} kg</span><span class="ok">Ver registro ›</span></button>`).join(""):"")+
     `<button class="opsrch" data-op="buscarreg">🔍 Buscar un despacho anterior</button>${can("hallazgo_reportar")?`<button class="opsrch" data-hz-ir="1">⚠ Reportar un hallazgo ambiental</button>`:""}`;
 }
@@ -1513,7 +1513,7 @@ function drawOpNuevo(){
   OP={v:"nuevo",k:null};
   const placas=[...new Set(CFG.PLACAS.concat(Object.keys(LS.get(VEHS,{}))))];
   $("#op-body").innerHTML=`<div style="margin:6px 0"><button class="btn sec sm" data-op="inicio">← Atrás</button></div>
-    <div class="card opf"><h2>Nuevo vehículo</h2>
+    <div class="card opf"><h2>Iniciar despacho</h2>
       <div class="plwrap"></div>
       <div class="fhd"><i>1</i>Vehículo</div>
       <label class="f" for="op-placa">Placa del vehículo</label>
