@@ -48,7 +48,7 @@ const ROJO_MARCA = "#e11d2e";
 function dibujarMarca_(g, m, W){
   const ancho = Math.max(4, W * 0.008);
   g.strokeStyle = ROJO_MARCA; g.fillStyle = ROJO_MARCA; g.lineWidth = ancho; g.lineCap = "round"; g.lineJoin = "round";
-  if (m.t === "o"){ g.beginPath(); g.arc(m.x, m.y, W * 0.07, 0, Math.PI * 2); g.stroke(); }
+  if (m.t === "o"){ g.beginPath(); g.arc(m.x, m.y, m.r || W * 0.07, 0, Math.PI * 2); g.stroke(); }
   else if (m.t === "f"){
     const a = Math.atan2(m.y2 - m.y, m.x2 - m.x), L = Math.max(ancho * 5, W * 0.05);
     g.beginPath(); g.moveTo(m.x, m.y); g.lineTo(m.x2, m.y2); g.stroke();
@@ -79,7 +79,7 @@ function marcarFoto(dataUrl, opts){
       ov.style.cssText = "position:fixed;inset:0;z-index:99999;background:#111;display:flex;flex-direction:column;font-family:system-ui,sans-serif;color:#fff";
       const btn = (txt, id) => '<button type="button" data-mk="' + id + '" style="flex:1;min-height:48px;border:0;border-radius:10px;background:#333;color:#fff;font-size:15px">' + txt + '</button>';
       ov.innerHTML =
-        '<div data-h style="padding:10px 12px;font-size:14px;text-align:center">' + (obligatoria ? "Marca la observación en la foto" : "Marca la foto (opcional)") + '</div>' +
+        '<div data-h style="padding:10px 12px;font-size:14px;text-align:center">' + (obligatoria ? "Marca la observación. En círculo: toque y arrastre para ajustar el tamaño" : "Marca la foto (opcional)") + '</div>' +
         '<div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 6px"><canvas style="max-width:100%;max-height:100%;touch-action:none;background:#000"></canvas></div>' +
         '<div style="display:flex;gap:8px;padding:8px 10px 4px">' + btn("◯ Círculo", "o") + btn("➚ Flecha", "f") + btn("✎ Trazo", "t") + btn("↶ Deshacer", "u") + '</div>' +
         '<div style="display:flex;gap:8px;padding:4px 10px 14px">' + btn("Cancelar", "x") + btn("Listo", "ok") + '</div>';
@@ -99,12 +99,12 @@ function marcarFoto(dataUrl, opts){
       cv.addEventListener("pointerdown", ev => {
         ev.preventDefault(); try{ cv.setPointerCapture(ev.pointerId); }catch(e){}
         const p = punto(ev);
-        actual = herr === "o" ? {t:"o", x:p[0], y:p[1]} : herr === "f" ? {t:"f", x:p[0], y:p[1], x2:p[0], y2:p[1]} : {t:"t", p:[p]};
+        actual = herr === "o" ? {t:"o", x:p[0], y:p[1], r:W * 0.07, mov:false} : herr === "f" ? {t:"f", x:p[0], y:p[1], x2:p[0], y2:p[1]} : {t:"t", p:[p]};
         pintar();
       });
       cv.addEventListener("pointermove", ev => {
         if (!actual) return; ev.preventDefault(); const p = punto(ev);
-        if (actual.t === "o"){ actual.x = p[0]; actual.y = p[1]; }      // el círculo se puede ajustar antes de soltar
+        if (actual.t === "o"){ const d = Math.hypot(p[0] - actual.x, p[1] - actual.y); if (d > W * 0.015) actual.mov = true; if (actual.mov) actual.r = Math.max(W * 0.02, d); }      // toque = círculo normal; arrastrar desde el centro lo agranda o achica
         else if (actual.t === "f"){ actual.x2 = p[0]; actual.y2 = p[1]; }
         else actual.p.push(p);
         pintar();
