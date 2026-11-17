@@ -1222,7 +1222,7 @@ function cambiaPlanta(n){
   if(n===CFG.PLANTA) return;
   const pend=HOJAS.filter(h=>dirty(h)&&!ajena(h)).length+Object.keys(LS.get(DESPQ,{})).length;
   if(pend){ toast("Hay "+pend+" registro"+(pend>1?"s":"")+" por enviar en "+CFG.PLANTA+". Espere a que se envíen antes de cambiar de planta."); drawPlantaSel(); sync(); return; }
-  LS.set(PLSEL,n); location.reload();
+  LS.set(PLSEL,n); try{ sessionStorage.setItem("reabre","nuevo"); }catch(e){} location.reload();
 }
 function drawHome(){
   drawPlantaSel();
@@ -2532,6 +2532,7 @@ function limpiaEquipo(){
   HOJAS.forEach(h=>{ h.pesadas=h.pesadas||[]; });
   limpiaEquipo();
   drawNet(); drawHome(); showView();
+  try{ if(sessionStorage.getItem("reabre")==="nuevo"){ sessionStorage.removeItem("reabre"); if(!AUTH||SES){ if(SIMPLE()) drawOpNuevo(); else { openNew(true); drawPlantaSel(); } } } }catch(e){}   // tras cambiar de planta, vuelve al formulario de despacho
   if(AUTH&&!SES) showLogin(); else if(SES&&SES.cambiar) openCta(true);
   if(navigator.onLine&&(!AUTH||SES)){ cargaPlantas(); sync(); cargaCatalogo(); refrescaDia(); }
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
