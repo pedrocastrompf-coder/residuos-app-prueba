@@ -14,7 +14,7 @@ const ERR = {
   estado_invalido:"Otra persona ya cambió este hallazgo. Se actualizó la lista.", ejecutora_invalida:"Elija un área ejecutante activa.",
   plazo_invalido:"El plazo debe ser desde hoy y hasta 365 días.", evidencia_requerida:"Agregue al menos una evidencia (foto o PDF).",
   evidencia_invalida:"La evidencia no es válida: 1 a 3 fotos, o un solo PDF de hasta 1.5 MB.", comentario_invalido:"El comentario admite hasta 300 caracteres.",
-  motivo_invalido:"El motivo debe tener entre 5 y 300 caracteres.", nombre_invalido:"El nombre del área debe tener entre 3 y 40 caracteres.", tipo_area_invalido:"Elija el tipo de área."
+  motivo_invalido:"El motivo debe tener entre 5 y 300 caracteres.", nombre_invalido:"El nombre del área debe tener entre 3 y 40 caracteres.", tipo_area_invalido:"Elija el tipo de área.", clave:"El servidor no reconoce esta acción. Avise al administrador: falta actualizar el script."
 };
 const S = {lista:null, t:0, cargando:null, accion:null, areasAdm:null, err:"", filtro:"pend", vista:"lista", id:null, areas:null, F:null, enviando:false, cache:{}};
 
