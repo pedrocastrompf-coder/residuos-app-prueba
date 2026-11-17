@@ -4,7 +4,7 @@
 (function(){
 "use strict";
 
-const TIPOS = (CFG.TIPOS_HALLAZGO && CFG.TIPOS_HALLAZGO.length) ? CFG.TIPOS_HALLAZGO : ["Residuos","Agua y efluentes","Emisiones y olores","Derrames y químicos","Energía","Orden y limpieza","Otro"];
+const TIPOS = (CFG.TIPOS_HALLAZGO && CFG.TIPOS_HALLAZGO.length) ? CFG.TIPOS_HALLAZGO : ["Segregación de residuos","Almacenamiento y acopio","Derrames y fugas","Efluentes y desagües","Orden y limpieza","Uso de agua y energía","Otro"];
 const RIESGOS = (CFG.RIESGOS_HALLAZGO && CFG.RIESGOS_HALLAZGO.length) ? CFG.RIESGOS_HALLAZGO : ["Bajo","Medio","Alto"];
 const MAX_FOTOS = 3;
 const ERR = {
@@ -418,8 +418,8 @@ document.addEventListener("click", ev => {
   if(k === "ayuda-riesgo"){
     const m = document.createElement("div"); m.className = "hz-modal";
     m.innerHTML = `<div role="dialog" aria-label="Niveles de riesgo"><h3>Niveles de riesgo</h3><p class="s">Elija el nivel según lo que observa en este momento.</p>
-      <div class="hz-niv" style="border-left-color:#2E8B57"><b>Bajo</b>Condición de orden, limpieza o señalización que no genera daño ni contaminación.<i>Ej.: contenedor sin rotular, tapa faltante, residuos de empaque fuera de su punto de acopio.</i></div>
-      <div class="hz-niv" style="border-left-color:#E07B1F"><b>Medio</b>Puede afectar el ambiente o la inocuidad si no se corrige pronto, pero está contenido.<i>Ej.: residuos orgánicos mezclados con plásticos, goteo menor de agua o grasa en zona de proceso, acopio de merma de chocolate o masa sin cubrir.</i></div>
+      <div class="hz-niv" style="border-left-color:#2E8B57"><b>Bajo</b>Condición de orden, limpieza o señalización que no genera daño ni contaminación.<i>Ej.: contenedor sin rotular, tapa faltante, bolsa de color equivocado con el contenido correcto.</i></div>
+      <div class="hz-niv" style="border-left-color:#E07B1F"><b>Medio</b>Puede afectar el ambiente o la inocuidad si no se corrige pronto, pero está contenido.<i>Ej.: residuos mezclados en una misma bolsa o en la bolsa de otro color, goteo menor de agua o grasa en zona de proceso, acopio de merma de chocolate o masa sin cubrir.</i></div>
       <div class="hz-niv" style="border-left-color:#B3261E"><b>Alto</b>Hay contaminación en curso, riesgo inmediato o posible incumplimiento legal.<i>Ej.: derrame de aceite, jarabe o efluente hacia el desagüe, fuga continua, residuo peligroso (químicos, aceites, RAEE) fuera del almacén autorizado, plaga asociada a residuos.</i></div>
       <button type="button" class="btn" style="margin-top:12px" data-hz="cerrar-modal">Entendido</button></div>`;
     document.body.appendChild(m); return;
