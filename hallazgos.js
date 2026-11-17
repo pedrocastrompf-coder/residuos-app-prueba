@@ -22,6 +22,12 @@ const S = {lista:null, t:0, cargando:null, accion:null, areasAdm:null, err:"", f
 const st = document.createElement("style");
 st.textContent = `
 .hz-top{display:flex;gap:8px;margin:8px 0}
+.hz-ayuda{border:0;background:none;color:var(--brown);font-size:13px;font-weight:bold;text-decoration:underline;padding:4px 0}
+.hz-modal{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center}
+.hz-modal>div{background:#fff;width:100%;max-width:520px;max-height:90vh;overflow:auto;border-radius:18px 18px 0 0;padding:20px 18px 18px}
+.hz-modal h3{margin:0 0 4px;font-size:18px;color:var(--brown)} .hz-modal p.s{margin:0 0 12px;color:#6b5d52;font-size:13px}
+.hz-niv{border-left:5px solid var(--taupe);background:#faf7f3;border-radius:10px;padding:10px 12px;margin:8px 0;font-size:14px;line-height:1.4}
+.hz-niv b{display:block;font-size:15px;margin-bottom:2px} .hz-niv i{display:block;color:#6b5d52;font-style:normal;font-size:13px;margin-top:4px}
 .hz-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .hz-chips button{border:1.5px solid var(--taupe);background:#fff;color:var(--brown);border-radius:999px;padding:6px 12px;font-weight:bold;font-size:13px}
 .hz-chips button.on{background:var(--brown);border-color:var(--brown);color:#fff}
@@ -135,7 +141,7 @@ function pintaNuevo(){
       <select id="hz-area" class="in"><option value="">Elegir…</option>${areas.map(a => `<option ${a.nombre===F.area?"selected":""}>${esc(a.nombre)}</option>`).join("")}</select>
       <label class="f" for="hz-tipo">Tipo</label>
       <select id="hz-tipo" class="in"><option value="">Elegir…</option>${TIPOS.map(t => `<option ${t===F.tipo?"selected":""}>${esc(t)}</option>`).join("")}</select>
-      <label class="f">Riesgo</label>
+      <label class="f" style="display:flex;justify-content:space-between;align-items:center">Riesgo <button type="button" data-hz="ayuda-riesgo" class="hz-ayuda">¿Cómo elegir el nivel?</button></label>
       <div class="seg">${RIESGOS.map(r => `<button type="button" data-hz-riesgo="${esc(r)}" class="${r===F.riesgo?"on":""}">${esc(r)}</button>`).join("")}</div>
       <label class="f" for="hz-desc">¿Qué se observa?</label>
       <textarea id="hz-desc" class="in" rows="3" maxlength="500" placeholder="Ej.: fuga de agua en el caño del vestuario de hombres">${esc(F.desc)}</textarea>
@@ -409,6 +415,16 @@ document.addEventListener("click", ev => {
   const aa = t.closest("[data-hz-are-act]"); if(aa){ const a = (S.areasAdm || []).find(x => x.nombre === aa.dataset.hzAreAct); if(a) guardaArea({nombre:a.nombre, tipo:a.tipo, ejecutora:a.ejecutora, activo:!a.activo}, a.activo ? "Área desactivada." : "Área activada."); return; }
   const a = t.closest("[data-hz]"); if(!a) return;
   const k = a.dataset.hz;
+  if(k === "ayuda-riesgo"){
+    const m = document.createElement("div"); m.className = "hz-modal";
+    m.innerHTML = `<div role="dialog" aria-label="Niveles de riesgo"><h3>Niveles de riesgo</h3><p class="s">Elija el nivel según lo que observa en este momento.</p>
+      <div class="hz-niv" style="border-left-color:#2E8B57"><b>Bajo</b>Condición de orden, limpieza o señalización que no genera daño ni contaminación.<i>Ej.: contenedor sin rotular, tapa faltante, residuos de empaque fuera de su punto de acopio.</i></div>
+      <div class="hz-niv" style="border-left-color:#E07B1F"><b>Medio</b>Puede afectar el ambiente o la inocuidad si no se corrige pronto, pero está contenido.<i>Ej.: residuos orgánicos mezclados con plásticos, goteo menor de agua o grasa en zona de proceso, acopio de merma de chocolate o masa sin cubrir.</i></div>
+      <div class="hz-niv" style="border-left-color:#B3261E"><b>Alto</b>Hay contaminación en curso, riesgo inmediato o posible incumplimiento legal.<i>Ej.: derrame de aceite, jarabe o efluente hacia el desagüe, fuga continua, residuo peligroso (químicos, aceites, RAEE) fuera del almacén autorizado, plaga asociada a residuos.</i></div>
+      <button type="button" class="btn" style="margin-top:12px" data-hz="cerrar-modal">Entendido</button></div>`;
+    document.body.appendChild(m); return;
+  }
+  if(k === "cerrar-modal"){ const m = a.closest(".hz-modal"); if(m) m.remove(); return; }
   if(k === "area-crear"){
     const nombre = document.getElementById("ar-nom").value.trim().replace(/\s+/g, " ");
     if(nombre.length < 3){ S.areaErr = ERR.nombre_invalido; return pintaAreas(); }
