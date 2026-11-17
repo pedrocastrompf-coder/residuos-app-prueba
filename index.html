@@ -1210,6 +1210,7 @@ function showView(){
   if(enMenu) $("#ptitle").textContent="Menú principal";
   if(TAB==="hall"){ $("#ptitle").textContent="Hallazgos ambientales"; if(typeof drawHall==="function") drawHall(); }
   if(TAB==="are"){ $("#ptitle").textContent="Áreas"; if(typeof drawAreas==="function") drawAreas(); }
+  drawPlantaSel();
   window.scrollTo(0,0);
 }
 
@@ -1234,7 +1235,9 @@ async function cargaPlantas(){
 }
 function drawPlantaSel(){
   const A=plantasAct();
-  $("#sub").textContent=CFG.PLANTA;
+  // en Despacho (donde se consultan despachos de la planta) el cambio de planta está a la vista en el encabezado
+  if(A.length>1&&MOD==="rs"&&TAB==="desp") $("#sub").innerHTML=`<select id="pl-sel" class="pl-sel" aria-label="Planta">${A.map(p=>`<option${p.planta===CFG.PLANTA?" selected":""}>${esc(p.planta)}</option>`).join("")}</select>`;
+  else $("#sub").textContent=CFG.PLANTA;
   const html=A.length>1?`<label class="f">Planta</label><select class="in pl-sel" aria-label="Planta">${A.map(p=>`<option${p.planta===CFG.PLANTA?" selected":""}>${esc(p.planta)}</option>`).join("")}</select>`:"";
   $$(".plwrap").forEach(w=>w.innerHTML=html);
 }
@@ -1242,7 +1245,7 @@ function cambiaPlanta(n){
   if(n===CFG.PLANTA) return;
   const pend=HOJAS.filter(h=>dirty(h)&&!ajena(h)).length+Object.keys(LS.get(DESPQ,{})).length;
   if(pend){ toast("Todavía hay datos sin enviar de "+CFG.PLANTA+". Espere a que se envíen y vuelva a cambiar de planta."); drawPlantaSel(); sync(); return; }
-  LS.set(PLSEL,n); try{ sessionStorage.setItem("reabre","nuevo"); }catch(e){} location.reload();
+  LS.set(PLSEL,n); try{ sessionStorage.setItem("reabre",TAB==="desp"?"desp":"nuevo"); }catch(e){} location.reload();
 }
 function drawHome(){
   drawPlantaSel();
@@ -2572,6 +2575,7 @@ function limpiaEquipo(){
   HOJAS.forEach(h=>{ h.pesadas=h.pesadas||[]; });
   limpiaEquipo();
   drawNet(); drawHome(); showView();
+  try{ if(sessionStorage.getItem("reabre")==="desp"){ sessionStorage.removeItem("reabre"); if(!AUTH||SES){ TAB="desp"; entraDesp(); showView(); } } }catch(e){}   // tras cambiar de planta desde Despacho, sigue en Despacho
   try{ if(sessionStorage.getItem("reabre")==="nuevo"){ sessionStorage.removeItem("reabre"); if(!AUTH||SES){ if(SIMPLE()) drawOpNuevo(); else { openNew(true); drawPlantaSel(); } } } }catch(e){}   // tras cambiar de planta, vuelve al formulario de despacho
   if(AUTH&&!SES) showLogin(); else if(SES&&SES.cambiar) openCta(true);
   if(navigator.onLine&&(!AUTH||SES)){ cargaPlantas(); sync(); cargaCatalogo(); refrescaDia(); }
