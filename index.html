@@ -472,6 +472,15 @@ body{background:var(--bg)}
 .bar small{font-size:12px}
 @media(max-width:520px){ .bar h1 #ptitle{font-size:15px} }
 /* menú lateral premium */
+.fhd{display:flex;align-items:center;gap:10px;margin:20px 0 2px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.fhd i{font-style:normal;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--brown);color:#fff;font-size:12px;letter-spacing:0}
+.fhd::after{content:"";flex:1;height:1px;background:var(--line)}
+.fhd:first-of-type{margin-top:6px}
+.newcard .placa{font-size:22px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;min-height:52px}
+.newcard .vehbox{border:0;background:none;padding:0;margin:0}
+.vhint{margin:10px 0 0;padding:9px 12px;border-radius:10px;background:#f7f1ea;color:var(--ink2);font-size:12.5px}
+.newcard>.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:420px){.newcard>.row2{grid-template-columns:1fr}}
 .tab.xmod{display:none!important}
 .mhub{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));padding:6px 0 24px}
 .mhi{grid-column:1/-1;padding:14px 4px 4px}.mhi h2{margin:0;font-size:28px;letter-spacing:-.02em}.mhi p{margin:4px 0 0;color:var(--mute);font-size:15px}
@@ -612,20 +621,22 @@ input[type=date].in,input[type=time].in{font-variant-numeric:tabular-nums}
         <button class="btn" id="b-new">+ Iniciar despacho</button>
         <div class="card newcard" id="n-card">
           <h2>Iniciar despacho</h2>
+          <div class="fhd"><i>1</i>Datos del despacho</div>
           <div class="plwrap"></div>
           <label class="f">Puerta</label>
           <div class="seg" id="n-puerta"></div>
-          <label class="f" for="n-fecha">Fecha</label>
-          <input id="n-fecha" type="date" class="in">
-          <label class="f" for="n-placa">Placa del vehículo de despacho</label>
-          <input id="n-placa" class="in" list="dl-placas" autocapitalize="characters" autocomplete="off" placeholder="Ej.: ABZ-937">
+          <div class="row2">
+            <div><label class="f" for="n-fecha">Fecha</label><input id="n-fecha" type="date" class="in"></div>
+            <div><label class="f" for="n-resp">Responsable del registro</label><input id="n-resp" class="in" autocomplete="off" placeholder="Nombre y apellido"></div>
+          </div>
+          <div class="fhd"><i>2</i>Vehículo y conductor</div>
+          <label class="f" for="n-placa">Placa del vehículo</label>
+          <input id="n-placa" class="in placa" list="dl-placas" autocapitalize="characters" autocomplete="off" placeholder="ABZ-937">
           <div class="vchips hidden" id="n-vh"></div>
           <datalist id="dl-placas"></datalist>
           <datalist id="dl-placas-d"></datalist>
-          <label class="f" for="n-resp">Responsable del registro</label>
-          <input id="n-resp" class="in" autocomplete="off" placeholder="Nombre y apellido">
           <div class="vehbox hidden" id="n-veh">
-            <div class="muted">Datos del vehículo (se piden una vez por viaje)</div>
+            <div class="vhint">Vehículo nuevo: complete sus datos. Se piden una sola vez por viaje.</div>
             <label class="f" for="n-emp">Empresa operadora</label>
             <input id="n-emp" class="in" list="dl-emp" autocomplete="off">
             <datalist id="dl-emp"></datalist>
@@ -1491,9 +1502,11 @@ function drawOpNuevo(){
   $("#op-body").innerHTML=`<div style="margin:6px 0"><button class="btn sec sm" data-op="inicio">← Atrás</button></div>
     <div class="card opf"><h2>Iniciar despacho</h2>
       <div class="plwrap"></div>
+      <div class="fhd"><i>1</i>Vehículo</div>
       <label class="f" for="op-placa">Placa del vehículo</label>
       <input id="op-placa" class="in placa" list="dl-op" autocapitalize="characters" autocomplete="off" placeholder="ABZ-937"><datalist id="dl-op">${placas.map(p=>`<option value="${esc(p)}">`).join("")}</datalist>
       <div class="vehya hidden" id="op-ya"></div>
+      <div class="fhd"><i>2</i>Conductor y llegada</div>
       <label class="f" for="op-emp">Empresa operadora</label>
       <input id="op-emp" class="in" list="dl-emp" autocomplete="off">
       <label class="f" for="op-cond">Conductor</label>
