@@ -674,7 +674,7 @@ input[type=date].in,input[type=time].in{font-variant-numeric:tabular-nums}
       <div class="l1" id="hh-l1"></div>
       <div class="muted" id="hh-l2"></div>
       <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:4px">
-        <div><div class="muted">Total neto de la hoja</div><div class="tot"><span id="hh-kg">0</span> kg</div></div>
+        <div><div class="muted">Total pesado en esta puerta</div><div class="tot"><span id="hh-kg">0</span> kg</div></div>
         <div class="muted" id="hh-un" style="text-align:right"></div>
       </div>
       <div class="warnbox hidden" id="hh-warn"></div>
@@ -796,7 +796,7 @@ input[type=date].in,input[type=time].in{font-variant-numeric:tabular-nums}
 
 <div class="dock hidden" id="dock">
   <button class="btn sec" id="b-back">← Atrás</button>
-  <button class="btn" id="b-close">✓ Finalizar pesaje</button>
+  <button class="btn" id="b-close">✓ Terminé esta puerta</button>
 </div>
 
 <!-- Pesadas de un residuo -->
@@ -1129,7 +1129,7 @@ function estadoHoja(){   // Operador: dice con claridad si lo pesado ya está a 
   const pend=dirty(H)&&CFG.SCRIPT_URL; let t="";
   if(aprobada(H)) t="🔒 Despacho aprobado: solo se puede ver";
   else if(ajena(H)) t="Solo se puede ver. "+msgAjena(H);
-  else if(H.estado==="cerrada") t=pend?"Puerta terminada. "+(navigator.onLine?"Enviando datos…":"Sin internet: se enviará solo cuando vuelva la señal."):"✓ Puerta terminada y enviada. Toque «Reabrir hoja» si quiere agregar más pesadas.";
+  else if(H.estado==="cerrada") t=pend?"Puerta terminada. "+(navigator.onLine?"Enviando datos…":"Sin internet: se enviará solo cuando vuelva la señal."):"✓ Puerta terminada y enviada. Toque «Reabrir esta puerta» si quiere agregar más pesadas.";
   else if(H.pesadas.length) t=pend?(navigator.onLine?"Guardado en este equipo · enviando datos…":"Guardado en este equipo · se enviará cuando vuelva el internet"):"✓ Guardado y enviado";
   const el=$("#hh-l2"); el.textContent=t; el.classList.toggle("hidden",!t);
 }
@@ -1447,7 +1447,7 @@ function drawOp(){
     box.innerHTML=`<div style="margin:6px 0"><button class="btn sec sm" data-op="inicio">← Atrás</button></div>
       <div class="card"><div class="tk" style="border:0;padding:0;margin:0;background:none"><div class="p">${esc(c.placa)}${multi?`<span class="bdg ab">Viaje ${c.viaje}</span>`:""}</div>
       <div class="m">${esc(d.empresa||"")}${d.conductor?" · "+esc(d.conductor):""}${horaTxt(d.hora)?" · llegó "+esc(horaTxt(d.hora)):""}</div></div></div>
-      <div class="opt">¿En qué puerta lo va a pesar?</div>
+      <div class="opt">Toque la puerta donde va a pesar<div class="muted" style="font-weight:400;margin-top:2px">Puede ser una sola o varias.</div></div>
       <div class="doors">${CFG.PUERTAS.map(p=>{ const h=hojaDe(c,p), aj=h&&ajena(h);
         const sub=h?`${fmt(kgHoja(h))} kg · ${(h.pesadas||[]).length} pesada${(h.pesadas||[]).length===1?"":"s"}${h.estado==="cerrada"?" · terminada":" · en curso"}${aj?" · "+esc(h.responsable):""}`:"Sin pesar todavía";
         return `<button class="door ${h?(h.estado==="cerrada"?"ce":"has"):""} ${aj?"lock":""}" data-door="${esc(p)}"><span><b>${esc(p)}</b><small>${sub}</small></span><span class="go">›</span></button>`; }).join("")}</div>
@@ -1456,7 +1456,7 @@ function drawOp(){
         // orden: primero se termina el pesado; recién entonces se genera el registro de despacho
         return listo
           ? (can("aprobar")?`<button class="btn xl" data-gdesp="${esc(c.k)}">Generar registro de despacho</button><div class="muted" style="text-align:center;margin-top:8px">Revise los datos, complete manejo y precintos, y apruebe.</div>`:"")
-          : `<button class="btn xl" data-op="fin">Terminar con el pesado de residuos</button><div class="muted" style="text-align:center;margin-top:8px">Al terminar, sus hojas se cierran y se envían.</div>`; })()}`;
+          : `<div style="border-top:1px solid var(--line);margin:22px 0 14px"></div><button class="btn xl" data-op="fin">Terminé con este despacho</button><div class="muted" style="text-align:center;margin-top:8px">Se cierran todas las puertas y se envían los datos.</div>`; })()}`;
     return;
   }
   if(OP.v==="buscar") return drawOpBuscar();
@@ -1467,7 +1467,7 @@ function drawOp(){
     const tag=c.fecha!==hoy?`<span class="bdg tv">Del ${fechaCorta(c.fecha).slice(0,5)}</span>`:listo?`<span class="bdg ap">pesado</span>`:con.length?`<span class="bdg pe">pesando</span>`:"";
     const est=listo?"Pesado, sin registro":con.length?(mias.length?"Pesado, sin terminar":"En pesaje"):"Sin pesar todavía";
     const btn=listo?(can("aprobar")?`<button class="btn" data-gdesp="${esc(c.k)}">Generar registro de despacho</button>`:"")
-      :mias.length?`<button class="btn" data-opfin="${esc(c.k)}">Terminar con el pesado de residuos</button>`
+      :mias.length?`<button class="btn" data-opfin="${esc(c.k)}">Terminé con este despacho</button>`
       :`<button class="btn" data-tk="${esc(c.k)}">Continuar pesado</button>`;
     return `<div class="tkc"><div class="tkh" data-tk="${esc(c.k)}"><div class="p">${esc(c.placa)}${c.viaje>1?`<span class="bdg ab">Viaje ${c.viaje}</span>`:""}${tag}</div>
       <div class="m">${esc(d.empresa||"")}${d.empresa?" · ":""}${est}${!con.length&&horaTxt(d.hora)?" · llegó "+esc(horaTxt(d.hora)):""}</div><div class="pchs">${chipsPuertas(c)}</div></div>${btn}</div>`; };
@@ -1592,7 +1592,7 @@ async function opTerminar(){
   const mias=c.hojas.filter(h=>!ajena(h)&&!aprobada(h)), abiertas=mias.filter(h=>h.estado!=="cerrada"&&(h.pesadas||[]).length);
   const pend=abiertas.reduce((a,h)=>a+pendHoja(h),0);
   if(pend) return toast("Falta pesar los pallets vacíos de "+pend+" pesada"+(pend>1?"s":"")+". Hágalo antes de terminar.");
-  if(!abiertas.length&&!mias.some(h=>(h.pesadas||[]).length)) return toast("Todavía no pesó nada en este camión.");
+  if(!abiertas.length&&!mias.some(h=>(h.pesadas||[]).length)) return toast("Todavía no pesó nada en este despacho.");
   for(const h of abiertas){ h.estado="cerrada"; await saveHoja(h); }
   toast("Pesaje del camión terminado."+(navigator.onLine?" Enviando datos…":" Sin internet: se enviará solo cuando vuelva la señal."));
   OP={v:"inicio",k:null}; drawOp();
@@ -1645,7 +1645,7 @@ function drawHoja(){
     return `<div class="bw ${abre?"open":""}"><button class="bt ${b.esp?"esp":""}" data-b="${b.id}" style="${st}"><span>${esc(b.t)}</span><small>${o.todos.length?o.todos.length+" residuo"+(o.todos.length>1?"s":""):"sin residuos"} · NTP ${esc(b.ntp)}</small>${kg?`<span class="kgb">${fmt(kg)} kg</span>`:""}</button>${cuerpo}</div>`;
   }).join("")+`</div>`;
   $("#lista").innerHTML = html || `<div class="card muted">Sin resultados.</div>`;
-  const b=$("#b-close"); b.textContent = H.estado==="cerrada"?"Reabrir hoja":"✓ Finalizar pesaje"; b.classList.toggle("warn",H.estado==="cerrada"); b.classList.toggle("hidden",ap||(S&&(ajena(H)||(H.estado!=="cerrada"&&!H.pesadas.length))));
+  const b=$("#b-close"); b.textContent = H.estado==="cerrada"?"Reabrir esta puerta":"✓ Terminé esta puerta"; b.classList.toggle("warn",H.estado==="cerrada"); b.classList.toggle("hidden",ap||(S&&(ajena(H)||(H.estado!=="cerrada"&&!H.pesadas.length))));
   $("#b-back").textContent="← Atrás";
 }
 
@@ -1688,7 +1688,7 @@ function openSheet(key){
   CUR=CATBY.get(key); if(!CUR) return;
   if(ajena(H)) return toast(msgAjena(H));
   if(aprobada(H)) return toast("Este despacho ya fue aprobado: solo se puede ver. Para corregirlo, pida al administrador que lo reabra.");
-  if(H.estado==="cerrada") return toast("Este pesaje ya está terminado. Para cambiarlo, toque «Reabrir hoja».");
+  if(H.estado==="cerrada") return toast("Este pesaje ya está terminado. Para cambiarlo, toque «Reabrir esta puerta».");
   EDIT=null;
   $("#sh-name").textContent=CUR.name; $("#sh-sap").textContent=CUR.cod?"SAP "+CUR.cod:"Sin código SAP";
   $("#f-tu").innerHTML=CFG.UNIDADES.map(([c,n])=>`<option value="${c}">${esc(n)} (${c})</option>`).join("");
