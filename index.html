@@ -1115,20 +1115,20 @@ let syncAgain=false;
 function sync(){
   if(syncing){ syncAgain=true; return syncing; }          // un cambio llegó mientras se enviaba: se repite el envío al terminar
   syncing=(async()=>{ do{ syncAgain=false; await syncRun().catch(()=>{}); }while(syncAgain&&!lastErr&&navigator.onLine); })().then(()=>{ syncing=null; drawQueue(); drawHojas();
-    if(lastErr==="clave") toast("La clave de la app no coincide con la configurada en el Google Sheet.");
-    if(lastErr==="permiso") toast("Su rol no permite este cambio.");
-    if(lastErr==="aprobado") toast("Despacho ya aprobado: el cambio no se envió. Solicitar la reapertura.");
+    if(lastErr==="clave") toast("La app no está bien configurada. Avise al administrador.");
+    if(lastErr==="permiso") toast("Su usuario no tiene permiso para hacer este cambio.");
+    if(lastErr==="aprobado") toast("Este despacho ya fue aprobado, por eso el cambio no se guardó. Pida al administrador que lo reabra.");
   });
   return syncing;
 }
-function msgAjena(h){ return "Esta hoja la abrió la cuenta «"+(h.usuario||h.responsable)+"». Solo esa cuenta o un Inspector puede modificarla."; }
+function msgAjena(h){ return "Este pesaje lo inició «"+(h.usuario||h.responsable)+"». Solo esa persona o un Inspector puede cambiarlo."; }
 function estadoHoja(){   // Operador: dice con claridad si lo pesado ya está a salvo
   if(!H||!SIMPLE()) return;
   const pend=dirty(H)&&CFG.SCRIPT_URL; let t="";
-  if(aprobada(H)) t="🔒 Despacho aprobado: solo lectura";
-  else if(ajena(H)) t="Solo lectura. "+msgAjena(H);
-  else if(H.estado==="cerrada") t=pend?"Puerta terminada. "+(navigator.onLine?"Enviando…":"Se enviará cuando haya señal."):"✓ Puerta terminada y enviada. Toque «Reabrir hoja» para agregar pesadas.";
-  else if(H.pesadas.length) t=pend?(navigator.onLine?"Guardado en este equipo · enviando…":"Guardado en este equipo · se enviará cuando haya señal"):"✓ Guardado y enviado";
+  if(aprobada(H)) t="🔒 Despacho aprobado: solo se puede ver";
+  else if(ajena(H)) t="Solo se puede ver. "+msgAjena(H);
+  else if(H.estado==="cerrada") t=pend?"Puerta terminada. "+(navigator.onLine?"Enviando datos…":"Sin internet: se enviará solo cuando vuelva la señal."):"✓ Puerta terminada y enviada. Toque «Reabrir hoja» si quiere agregar más pesadas.";
+  else if(H.pesadas.length) t=pend?(navigator.onLine?"Guardado en este equipo · enviando datos…":"Guardado en este equipo · se enviará cuando vuelva el internet"):"✓ Guardado y enviado";
   const el=$("#hh-l2"); el.textContent=t; el.classList.toggle("hidden",!t);
 }
 function drawQueue(){
@@ -1138,7 +1138,7 @@ function drawQueue(){
   c.textContent = show?`⏳ ${n} por enviar`:"";
   estadoHoja();
   const w=$("#q-warn"); w.classList.toggle("hidden",!show);
-  if(show) $("#q-txt").textContent=`⏳ ${n} registro${n>1?"s":""} sin enviar al Google Sheet. ${navigator.onLine?"Enviando…":"Se enviarán al recuperar la señal."} No borre los datos del navegador ni cierre sesión hasta que desaparezca este aviso.`;
+  if(show) $("#q-txt").textContent=`⏳ Hay ${n} pesaje${n>1?"s":""} sin enviar. ${navigator.onLine?"Enviando datos…":"Se enviarán solos cuando vuelva el internet."} No cierre sesión ni borre los datos del navegador hasta que desaparezca este aviso.`;
 }
 function drawNet(){ const c=$("#chip-net"); const on=navigator.onLine; c.classList.toggle("off",!on); $("span",c).textContent=on?"Con conexión":"Sin conexión"; }
 
@@ -1236,7 +1236,7 @@ function drawPlantaSel(){
 function cambiaPlanta(n){
   if(n===CFG.PLANTA) return;
   const pend=HOJAS.filter(h=>dirty(h)&&!ajena(h)).length+Object.keys(LS.get(DESPQ,{})).length;
-  if(pend){ toast("Hay "+pend+" registro"+(pend>1?"s":"")+" por enviar en "+CFG.PLANTA+". Espere a que se envíen antes de cambiar de planta."); drawPlantaSel(); sync(); return; }
+  if(pend){ toast("Todavía hay datos sin enviar de "+CFG.PLANTA+". Espere a que se envíen y vuelva a cambiar de planta."); drawPlantaSel(); sync(); return; }
   LS.set(PLSEL,n); try{ sessionStorage.setItem("reabre","nuevo"); }catch(e){} location.reload();
 }
 function drawHome(){
@@ -1274,7 +1274,7 @@ function syncVeh(){
   }
   box.classList.toggle("hidden",ya);
   const my=$("#n-vehya"); my.classList.toggle("hidden",!ya);
-  if(ya) my.textContent="✓ Datos del vehículo ya registrados para este viaje ("+dv.empresa+" · "+dv.conductor+(dv.brevete?" · "+dv.brevete:"")+"). No se piden de nuevo.";
+  if(ya) my.textContent="✓ Los datos de este vehículo ya están registrados ("+dv.empresa+" · "+dv.conductor+(dv.brevete?" · "+dv.brevete:"")+"). No hace falta escribirlos otra vez.";
   if(!ya){
     if(!$("#n-hora").value) $("#n-hora").value=horaAhora();
     const h=placa?vehsGet(placa):null;
@@ -1360,30 +1360,30 @@ async function startHoja(viajeFijo){
   if(!fecha) return void(e.textContent="Seleccione la fecha.");
   if(fecha>todayStr()) return void(e.textContent="La fecha no puede ser futura.");
   if(placa.length<5) return void(e.textContent="Ingrese la placa del vehículo.");
-  if(AUTH&&!SES) return void(e.textContent="Inicie sesión para registrar.");
+  if(AUTH&&!SES) return void(e.textContent="Primero ingrese con su usuario.");
   if(resp.split(" ").length<2) return void(e.textContent="Ingrese nombre y apellido del responsable.");
   LS.set("pesaje.puerta",puerta); if(!AUTH) LS.set("pesaje.resp",resp); LS.set("pesaje.placa",placa);
   const locV=HOJAS.filter(h=>h.fecha===fecha&&normPlaca(h.placa)===placa).map(h=>vj(h.viaje));
   let v;
   if(viajeFijo){
     v=vj(viajeFijo); await aprobFresco({fecha,placa,viaje:v});
-    if(aprobada({fecha,placa,viaje:v})) return void(e.textContent="El Viaje "+v+" de "+placa+" ya fue aprobado. Para un nuevo viaje, use «Nuevo vehículo».");
+    if(aprobada({fecha,placa,viaje:v})) return void(e.textContent="El Viaje "+v+" de "+placa+" ya fue aprobado. Si el vehículo volvió a llegar, use «Nuevo vehículo».");
   } else {
     // viaje vigente = el último de este vehículo en la fecha; si ya está aprobado, se propone un viaje nuevo
     const v0=Math.max(1,...locV); v=v0;
     for(let i=0;i<10;i++){ await aprobFresco({fecha,placa,viaje:v}); if(!aprobada({fecha,placa,viaje:v})) break; v++; }
-    if(v>v0 && viajeOk!==fecha+"|"+placa+"|"+v && !confirm("El Viaje "+(v-1)+" de "+placa+" del "+fechaCorta(fecha)+" ya está aprobado.\n¿Iniciar el Viaje "+v+" como un despacho independiente?")) return void(e.textContent="Viaje no iniciado.");
+    if(v>v0 && viajeOk!==fecha+"|"+placa+"|"+v && !confirm("El vehículo "+placa+" ya salió el "+fechaCorta(fecha)+" (despacho aprobado).\n¿Volvió a llegar? Si acepta, se registra como una nueva salida (Viaje "+v+").")) return void(e.textContent="No se registró la nueva salida.");
     if(v>v0) viajeOk=fecha+"|"+placa+"|"+v;
   }
   const ex=HOJAS.find(h=>h.puerta===puerta&&h.fecha===fecha&&h.placa===placa&&vj(h.viaje)===v);
-  if(ex){ toast("Hoja existente: se abrió para continuar."); return openHoja(ex.id); }
+  if(ex){ toast("Este vehículo ya tiene un pesaje en esa puerta. Se abrió para que continúe."); return openHoja(ex.id); }
   // datos del vehículo (empresa, conductor, brevete, hora de llegada): se piden una sola vez por viaje
   const kV=dkey(fecha,placa,v);
   if(!vehDe(kV)){
     const box=$("#n-veh");
     if(box.classList.contains("hidden")){
       box.classList.remove("hidden"); if(!$("#n-hora").value) $("#n-hora").value=horaAhora();
-      return void(e.textContent="Complete los datos del vehículo para iniciar el pesaje.");
+      return void(e.textContent="Complete los datos del vehículo y toque de nuevo «Iniciar pesaje».");
     }
     const d={empresa:$("#n-emp").value.trim(),conductor:$("#n-cond").value.trim().replace(/\s+/g," "),brevete:$("#n-brev").value.trim().toUpperCase(),hora:$("#n-hora").value};
     if(!d.empresa) return void(e.textContent="Ingrese la empresa operadora.");
@@ -1394,7 +1394,7 @@ async function startHoja(viajeFijo){
     const q=LS.get(DESPQ,{}); q[kV]={key:CFG.CLAVE,action:"despacho",sede:CFG.PLANTA,fecha,placa,viaje:v,empresa:d.empresa,conductor:d.conductor,brevete:d.brevete,hora:d.hora,manejoNP:"",manejoP:"",obs:""}; LS.set(DESPQ,q);
   }
   const h={id:uuid(),puerta,fecha,placa,viaje:v,responsable:resp,usuario:AUTH&&SES?SES.usuario:"",estado:"abierta",pesadas:[],creado:Date.now(),rev:0,sync:0};
-  if(v>1) toast("Viaje "+v+" iniciado.");
+  if(v>1) toast("Nueva salida registrada (Viaje "+v+").");
   HOJAS.push(h); await saveHoja(h); ["#n-emp","#n-cond","#n-brev","#n-hora"].forEach(i=>{ $(i).value=""; $(i).dataset.auto="0"; }); if(AUTH&&SES) $("#n-resp").value=SES.nombre; openNew(false); openHoja(h.id);
   sync();
 }
@@ -1486,10 +1486,10 @@ function drawOpBuscar(){
       <div style="display:flex;gap:8px"><input id="ob-fecha" class="in" type="date" max="${todayStr()}" style="flex:1"><button class="btn" data-op="obfecha" style="width:auto;padding:0 18px">Ver</button></div>
       <div class="err" id="ob-err"></div><div id="ob-res"></div></div>`;
 }
-function abreRegistro(f,pl,v){ $("#d-fecha").value=f; $("#d-placa").value=pl; $("#d-viaje").value=v; TAB="desp"; showView(); if(navigator.onLine) toast("Consultando el Google Sheet…"); return consultarDespacho().then(()=>window.scrollTo({top:0})); }
+function abreRegistro(f,pl,v){ $("#d-fecha").value=f; $("#d-placa").value=pl; $("#d-viaje").value=v; TAB="desp"; showView(); if(navigator.onLine) toast("Buscando…"); return consultarDespacho().then(()=>window.scrollTo({top:0})); }
 async function opBuscar(modo){
   const e=$("#ob-err"), R=$("#ob-res"); e.textContent=""; R.innerHTML="";
-  if(!CFG.SCRIPT_URL||!navigator.onLine) return void(e.textContent="Requiere conexión con el Google Sheet.");
+  if(!CFG.SCRIPT_URL||!navigator.onLine) return void(e.textContent="Necesita internet. Conéctese e intente de nuevo.");
   try{
     if(modo==="num"){
       const txt=($("#ob-num").value||"").trim().toUpperCase(), pre=(txt.match(/^([A-Z]+\d*)\s*-/)||[])[1], n=parseInt(txt.replace(/^[A-Z]+\d*\s*-/,"").replace(/\D/g,""),10);
@@ -1501,11 +1501,11 @@ async function opBuscar(modo){
     }
     const f=$("#ob-fecha").value; if(!f) return void(e.textContent="Elija la fecha.");
     const j=await getJ({action:"hojas",fecha:f});
-    if(!j||!j.ok) return void(e.textContent="No se pudo consultar. Reintente.");
+    if(!j||!j.ok) return void(e.textContent="No se pudo buscar. Intente de nuevo.");
     const L=(j.despachos||[]).filter(d=>d.estado==="Aprobado").sort((a,b)=>(+a.numero||0)-(+b.numero||0));
     R.innerHTML=L.length?`<div class="opt">Aprobados el ${fechaCorta(f)}</div>`+L.map(d=>`<button class="aprow" data-gdesp="${esc(f)}|${esc(normPlaca(d.placa))}|${vj(d.viaje)}"><b>${esc(normPlaca(d.placa))}</b><span class="k">${d.numero?numReg(d.numero):""}${vj(d.viaje)>1?" · viaje "+vj(d.viaje):""}</span><span class="ok">Ver registro ›</span></button>`).join("")
       :`<div class="muted" style="margin-top:10px">No hay despachos aprobados el ${fechaCorta(f)}.</div>`;
-  }catch(x){ e.textContent="Sin conexión con el Google Sheet. Reintente."; }
+  }catch(x){ e.textContent="No hay internet. Intente de nuevo."; }
 }
 function drawOpNuevo(){
   OP={v:"nuevo",k:null};
@@ -1537,7 +1537,7 @@ function drawOpNuevo(){
 function opPlaca(){
   const placa=normPlaca($("#op-placa").value), hoy=todayStr(), ya=placa.length>=5&&camionesHoy().find(c=>c.fecha===hoy&&c.placa===placa&&c.d);
   const my=$("#op-ya"); my.classList.toggle("hidden",!ya);
-  if(ya) my.textContent="✓ Este camión ya está en curso con sus datos registrados. Toque «Continuar» para elegir la puerta.";
+  if(ya) my.textContent="✓ Este camión ya está en pesaje y sus datos ya están registrados. Toque «Continuar» para elegir la puerta.";
   // ya no se precargan empresa ni conductor por la placa (cambian de un viaje a otro): solo sugerencias al escribir
 }
 function opAuto(id,val){ const el=$(id); if(!el.value||el.dataset.auto==="1"){ el.value=val||""; el.dataset.auto=val?"1":"0"; } }
@@ -1545,7 +1545,7 @@ async function opSeguir(){
   const e=$("#op-err"); e.textContent="";
   const placa=normPlaca($("#op-placa").value), hoy=todayStr();
   if(placa.length<5) return void(e.textContent="Escriba la placa del camión.");
-  if(!SES) return void(e.textContent="Inicie sesión para registrar.");
+  if(!SES) return void(e.textContent="Primero ingrese con su usuario.");
   const ex=camionesHoy().filter(c=>c.fecha===hoy&&c.placa===placa&&c.d).sort((a,b)=>b.viaje-a.viaje)[0];
   if(ex){ OP={v:"camion",k:ex.k}; return drawOp(); }
   const d={empresa:$("#op-emp").value.trim(),conductor:$("#op-cond").value.trim().replace(/\s+/g," "),brevete:$("#op-brev").value.trim().toUpperCase(),hora:$("#op-hora").value};
@@ -1556,22 +1556,22 @@ async function opSeguir(){
   // viaje: si el último viaje de este camión ya fue aprobado, este es un viaje nuevo
   let v=Math.max(1,...HOJAS.filter(h=>h.fecha===hoy&&normPlaca(h.placa)===placa).map(h=>vj(h.viaje)));
   for(let i=0;i<10;i++){ await aprobFresco({fecha:hoy,placa,viaje:v}); if(!aprobada({fecha:hoy,placa,viaje:v})) break; v++; }
-  if(v>1&&!HOJAS.some(h=>h.fecha===hoy&&normPlaca(h.placa)===placa&&vj(h.viaje)===v)&&!confirm("Este camión ya salió hoy (despacho aprobado).\n¿Llegó otra vez? Se registrará como Viaje "+v+".")) return void(e.textContent="No se registró.");
+  if(v>1&&!HOJAS.some(h=>h.fecha===hoy&&normPlaca(h.placa)===placa&&vj(h.viaje)===v)&&!confirm("Este camión ya salió hoy (despacho aprobado).\n¿Volvió a llegar? Si acepta, se registra como una nueva salida (Viaje "+v+").")) return void(e.textContent="No se registró la nueva salida.");
   const kV=dkey(hoy,placa,v);
   vehSet(kV,d); vehsPut(placa,d);
   const q=LS.get(DESPQ,{}); q[kV]={key:CFG.CLAVE,action:"despacho",sede:CFG.PLANTA,fecha:hoy,placa,viaje:v,empresa:d.empresa,conductor:d.conductor,brevete:d.brevete,hora:d.hora,manejoNP:"",manejoP:"",obs:""}; LS.set(DESPQ,q);
   drawQueue(); sync();
-  OP={v:"camion",k:hoy+"|"+placa+"|"+v}; if(v>1) toast("Viaje "+v+" iniciado."); drawOp();
+  OP={v:"camion",k:hoy+"|"+placa+"|"+v}; if(v>1) toast("Nueva salida registrada (Viaje "+v+")."); drawOp();
 }
 function descartaNueva(){ if(H&&H.nuevo&&!(H.pesadas||[]).length){ const x=H; HOJAS=HOJAS.filter(h=>h!==x); } }
 async function borrarHojaVacia(h){
   const soloLocal=((h.rev||0)>0&&!h.sync)||aprobada(h)||!CFG.SCRIPT_URL;      // nunca llegó al Google Sheet: basta con quitarla de este equipo
   if(!soloLocal){
-    if(!navigator.onLine){ drawHojas(); return toast("Requiere conexión para eliminarla del Google Sheet."); }
-    let j; try{ j=await postJ({key:CFG.CLAVE,action:"hoja_borrar",id:h.id},30000); }catch(e){ drawHojas(); return toast("Sin conexión con el Google Sheet. Reintentar."); }
-    if(!j||!j.ok){ drawHojas(); return toast(j&&j.error==="con_pesadas"?"La hoja ya tiene pesadas registradas: no se eliminó.":j&&j.error==="aprobado"?"Despacho aprobado: no se puede eliminar.":"No se pudo eliminar ("+((j&&j.error)||"error")+")."); }
+    if(!navigator.onLine){ drawHojas(); return toast("Necesita internet para eliminar. Conéctese e intente de nuevo."); }
+    let j; try{ j=await postJ({key:CFG.CLAVE,action:"hoja_borrar",id:h.id},30000); }catch(e){ drawHojas(); return toast("No hay internet. Intente de nuevo."); }
+    if(!j||!j.ok){ drawHojas(); return toast(j&&j.error==="con_pesadas"?"Ya tiene pesos registrados: no se puede eliminar.":j&&j.error==="aprobado"?"Despacho aprobado: no se puede eliminar.":"No se pudo eliminar. Intente de nuevo."); }
   }
-  HOJAS=HOJAS.filter(x=>x!==h); await DB.del(h.id); drawHojas(); toast("Hoja eliminada.");
+  HOJAS=HOJAS.filter(x=>x!==h); await DB.del(h.id); drawHojas(); toast("Eliminado.");
 }
 let OPBUSY=false;
 async function opPuerta(puerta){
@@ -1589,10 +1589,10 @@ async function opTerminar(){
   const c=camionesHoy().find(x=>x.k===OP.k); if(!c) return;
   const mias=c.hojas.filter(h=>!ajena(h)&&!aprobada(h)), abiertas=mias.filter(h=>h.estado!=="cerrada"&&(h.pesadas||[]).length);
   const pend=abiertas.reduce((a,h)=>a+pendHoja(h),0);
-  if(pend) return toast("Faltan pesar los pallets vacíos de "+pend+" pesada"+(pend>1?"s":"")+" (tara al final). Hágalo antes de terminar.");
+  if(pend) return toast("Falta pesar los pallets vacíos de "+pend+" pesada"+(pend>1?"s":"")+". Hágalo antes de terminar.");
   if(!abiertas.length&&!mias.some(h=>(h.pesadas||[]).length)) return toast("Todavía no pesó nada en este camión.");
   for(const h of abiertas){ h.estado="cerrada"; await saveHoja(h); }
-  toast("Camión terminado."+(navigator.onLine?" Enviando…":" Se enviará cuando haya señal."));
+  toast("Pesaje del camión terminado."+(navigator.onLine?" Enviando datos…":" Sin internet: se enviará solo cuando vuelva la señal."));
   OP={v:"inicio",k:null}; drawOp();
 }
 
@@ -1636,7 +1636,7 @@ function drawHoja(){
     const st=`background:${b.bg};color:${b.fg};${b.bd?"border-color:"+b.bd+";":""}`;
     let cuerpo="";
     if(abre){
-      if(!o.items.length) cuerpo=`<div class="bempty">Catálogo vacío. Registrar los residuos en la pestaña «Catálogo» del Google Sheet.</div>`;
+      if(!o.items.length) cuerpo=`<div class="bempty">Catálogo vacío. Avise al administrador para que cargue los residuos.</div>`;
       else if(b.cats.length>1) cuerpo=b.cats.map(c=>{ const it=o.items.filter(x=>x.cat===c); return it.length?`<div class="bsub">${esc(c)}</div>`+it.map(row).join(""):""; }).join("");
       else cuerpo=o.items.map(row).join("");
     }
@@ -1649,19 +1649,19 @@ function drawHoja(){
 
 async function cerrarGrupo(f,pl,v){
   const hs=HOJAS.filter(h=>h.fecha===f&&normPlaca(h.placa)===normPlaca(pl)&&vj(h.viaje)===v&&h.estado!=="cerrada"&&!ajena(h)&&(h.pesadas||[]).length&&!pendHoja(h)&&!aprobada(h));
-  if(!hs.length) return toast("No hay hojas abiertas para cerrar.");
+  if(!hs.length) return toast("No hay pesajes abiertos para terminar.");
   for(const h of hs){ h.estado="cerrada"; await saveHoja(h); }
-  drawHojas(); toast(hs.length+" hoja"+(hs.length>1?"s":"")+" cerrada"+(hs.length>1?"s":"")+(navigator.onLine?". Enviando…":". Se enviarán cuando haya señal."));
+  drawHojas(); toast(hs.length+" pesaje"+(hs.length>1?"s terminados":" terminado")+(navigator.onLine?". Enviando datos…":". Sin internet: se enviará solo cuando vuelva la señal."));
 }
 async function cerrarOReabrir(){
   if(ajena(H)) return toast(msgAjena(H));
-  if(aprobada(H)) return toast("Despacho aprobado: edición bloqueada.");
-  if(H.estado==="cerrada"){ H.estado="abierta"; await saveHoja(H); drawHoja(); return toast("Hoja reabierta."); }
-  if(!H.pesadas.length) return toast("La hoja no tiene pesadas registradas.");
+  if(aprobada(H)) return toast("Este despacho ya fue aprobado y no se puede cambiar. Pida al administrador que lo reabra.");
+  if(H.estado==="cerrada"){ H.estado="abierta"; await saveHoja(H); drawHoja(); return toast("Pesaje reabierto. Ya puede hacer cambios."); }
+  if(!H.pesadas.length) return toast("Aún no hay pesadas registradas.");
   const pend=pendHoja(H);
-  if(pend) return toast(`Faltan pesar los pallets vacíos de ${pend} pesada${pend>1?"s":""} (tara al final). Hágalo antes de finalizar.`);
+  if(pend) return toast(`Falta pesar los pallets vacíos de ${pend} pesada${pend>1?"s":""}. Hágalo antes de finalizar.`);
   H.estado="cerrada"; await saveHoja(H);
-  if(SIMPLE()){ OP={v:"camion",k:dkOp(H)}; OPSRCH=false; H=null; showView(); return toast("Puerta terminada."+(navigator.onLine?" Enviando…":" Se enviará cuando haya señal.")); }
+  if(SIMPLE()){ OP={v:"camion",k:dkOp(H)}; OPSRCH=false; H=null; showView(); return toast("Pesaje de esta puerta terminado."+(navigator.onLine?" Enviando datos…":" Sin internet: se enviará solo cuando vuelva la señal.")); }
   drawHoja();
   toast(CFG.SCRIPT_URL?(navigator.onLine?"Hoja cerrada. Enviando…":"Hoja cerrada. Se enviará cuando haya señal."):"Hoja cerrada (modo local: falta conectar la hoja de Google).");
 }
@@ -1685,8 +1685,8 @@ function openSheet(key){
   conjModo(false);
   CUR=CATBY.get(key); if(!CUR) return;
   if(ajena(H)) return toast(msgAjena(H));
-  if(aprobada(H)) return toast("Despacho aprobado: solo lectura. Para corregir, solicitar la reapertura.");
-  if(H.estado==="cerrada") return toast("Hoja cerrada. Reabrir para editar.");
+  if(aprobada(H)) return toast("Este despacho ya fue aprobado: solo se puede ver. Para corregirlo, pida al administrador que lo reabra.");
+  if(H.estado==="cerrada") return toast("Este pesaje ya está terminado. Para cambiarlo, toque «Reabrir hoja».");
   EDIT=null;
   $("#sh-name").textContent=CUR.name; $("#sh-sap").textContent=CUR.cod?"SAP "+CUR.cod:"Sin código SAP";
   $("#f-tu").innerHTML=CFG.UNIDADES.map(([c,n])=>`<option value="${c}">${esc(n)} (${c})</option>`).join("");
@@ -1757,22 +1757,22 @@ function conjPrev(){
   el.innerHTML=`Brutos: ${c.P.map(p=>fmt(p.bruto)).join(" + ")} = ${fmt(c.br)} kg<br>Tara: ${fmt(c.tot)} kg → ${fmt(r2(c.tot/c.n))} kg por pallet<br><b>Neto: ${fmt(r2(c.br-c.tot))} kg</b>`;
 }
 async function conjAplicar(){
-  if(aprobada(H)) return toast("Despacho aprobado: edición bloqueada.");
+  if(aprobada(H)) return toast("Este despacho ya fue aprobado y no se puede cambiar. Pida al administrador que lo reabra.");
   const c=conjCalc(), e=$("#cj-err"); e.textContent="";
   if(!c.n) return conjModo(false);
-  if(isNaN(c.tot)||c.tot<=0) return void(e.textContent="Escriba el peso de la ruma de pallets vacíos.");
-  if(!c.ok) return void(e.textContent="La tara por pallet no puede ser mayor que el peso de un pallet lleno. Revise el peso.");
+  if(isNaN(c.tot)||c.tot<=0) return void(e.textContent="Escriba el peso total de los pallets vacíos.");
+  if(!c.ok) return void(e.textContent="Cada pallet vacío no puede pesar más que uno lleno. Revise el peso que escribió.");
   c.P.forEach((p,i)=>{ p.tara=c.ts[i]; p.taraPend=false; });
   await saveHoja(H); conjModo(false); drawSheet(); drawHoja();
-  toast("Tara descontada: "+fmt(c.tot)+" kg entre "+c.n+" pallet"+(c.n>1?"s":"")+".");
+  toast("Se descontó el peso de los pallets vacíos: "+fmt(c.tot)+" kg entre "+c.n+" pallet"+(c.n>1?"s":"")+".");
 }
 async function addPesada(){
-  if(aprobada(H)) return toast("Despacho aprobado: edición bloqueada.");
+  if(aprobada(H)) return toast("Este despacho ya fue aprobado y no se puede cambiar. Pida al administrador que lo reabra.");
   const f=readForm(), e=$("#f-err"); e.textContent="";
-  if(isNaN(f.bruto)||f.bruto<=0) return void(e.textContent="Ingrese el peso bruto.");
+  if(isNaN(f.bruto)||f.bruto<=0) return void(e.textContent="Escriba el peso que marca la balanza (peso bruto).");
   if(!f.taraPend){
     if(f.tara==null||isNaN(f.tara)||f.tara<0) return void(e.textContent="Escriba el peso del coche o toque «Sin tara».");
-    if(f.bruto-f.tara<=0) return void(e.textContent="El peso bruto debe ser mayor que la tara.");
+    if(f.bruto-f.tara<=0) return void(e.textContent="El peso de la balanza debe ser mayor que el del coche o pallet vacío. Revise los pesos.");
   }
   const rec={key:CUR.key,cod:CUR.cod,res:CUR.name,cat:CUR.cat,bruto:r2(f.bruto),tara:f.taraPend?null:r2(f.tara),taraPend:f.taraPend,uni:f.uni,tu:f.uni?f.tu:"",ts:Date.now()};
   if(EDIT){ const i=H.pesadas.findIndex(p=>p.id===EDIT); if(i>=0) H.pesadas[i]=Object.assign({},H.pesadas[i],rec,{ts:H.pesadas[i].ts}); }
@@ -1784,7 +1784,7 @@ async function addPesada(){
   resetForm(); closeSheet(); toast((edited?"Pesada actualizada":"Pesada guardada")+" · "+rec.res);
 }
 function editPesada(id){
-  if(aprobada(H)) return toast("Despacho aprobado: edición bloqueada.");
+  if(aprobada(H)) return toast("Este despacho ya fue aprobado y no se puede cambiar. Pida al administrador que lo reabra.");
   const p=H.pesadas.find(x=>x.id===id); if(!p) return;
   EDIT=id; $("#f-bruto").value=p.bruto; $("#f-uni").value=p.uni||"";
   if(p.taraPend){ TARA={t:"fin"}; $("#f-otra").value=""; } else if(!p.tara){ TARA={t:"none"}; $("#f-otra").value=""; } else { TARA={t:"val",v:p.tara}; $("#f-otra").value=p.tara; }
@@ -1794,7 +1794,7 @@ function editPesada(id){
 }
 let delAsk=null;
 async function delPesada(id,btn){
-  if(aprobada(H)) return toast("Despacho aprobado: edición bloqueada.");
+  if(aprobada(H)) return toast("Este despacho ya fue aprobado y no se puede cambiar. Pida al administrador que lo reabra.");
   if(delAsk!==id){ delAsk=id; btn.classList.add("ask"); btn.textContent="¿Borrar?"; setTimeout(()=>{ if(delAsk===id){ delAsk=null; if(btn.isConnected){ btn.classList.remove("ask"); btn.textContent="🗑"; } } },3000); return; }
   delAsk=null; H.pesadas=H.pesadas.filter(p=>p.id!==id); if(EDIT===id) resetForm();
   await saveHoja(H); drawSheet(); toast("Pesada eliminada");
@@ -1825,14 +1825,14 @@ async function buscarPorNumero(){
   const e=$("#d-numerr"), txt=($("#d-num").value||"").trim().toUpperCase(), pre=(txt.match(/^([A-Z]+\d*)\s*-/)||[])[1], n=parseInt(txt.replace(/^[A-Z]+\d*\s*-/,"").replace(/\D/g,""),10); e.textContent="";
   if(!n) return void(e.textContent="Escriba el N.° de registro.");
   if(pre&&pre!==codPlanta(CFG.PLANTA)) return void(e.textContent="El N.° "+txt+" no es de "+CFG.PLANTA+" ("+codPlanta(CFG.PLANTA)+"). Cambie de planta arriba y vuelva a buscar.");
-  if(!CFG.SCRIPT_URL||!navigator.onLine) return void(e.textContent="Requiere conexión con el Google Sheet.");
+  if(!CFG.SCRIPT_URL||!navigator.onLine) return void(e.textContent="Necesita internet. Conéctese e intente de nuevo.");
   const bt=$("#d-numgo"); bt.disabled=true;
   try{
     const j=await getJ({action:"buscar_numero",numero:n});
     if(!j||!j.ok) return void(e.textContent=j&&j.error==="no_existe"?"No hay un despacho con el N.° "+numReg(n)+" en "+CFG.PLANTA+".":"No se pudo buscar. Reintente.");
     $("#d-fecha").value=j.fecha; $("#d-placa").value=j.placa; $("#d-viaje").value=j.viaje; $("#d-num").value="";
     return consultarDespacho();
-  }catch(x){ e.textContent="Sin conexión con el Google Sheet. Reintente."; }
+  }catch(x){ e.textContent="No hay internet. Intente de nuevo."; }
   finally{ bt.disabled=false; }
 }
 async function buscarDespachos(){
@@ -1868,8 +1868,8 @@ async function consultarDespacho(){
       const r=await fetchT(`${CFG.SCRIPT_URL}?action=despacho&sede=${encodeURIComponent(CFG.PLANTA)}&fecha=${encodeURIComponent(fecha)}&placa=${encodeURIComponent(placa)}&viaje=${viaje}&key=${encodeURIComponent(CFG.CLAVE)}&token=${encodeURIComponent(tok())}`,{redirect:"follow"},25000);
       const j=await gj(r);
       if(j&&j.ok){ hojas=j.hojas||[]; DSRV=j.despacho||null; marcaAprob(fecha,placa,!!(DSRV&&DSRV.estado==="Aprobado"),viaje); origen="Hojas de todas las puertas (Google Sheets)"; }
-      else e.textContent="No se pudo consultar el Google Sheet ("+((j&&j.error)||"error")+"). Se muestran solo las de este equipo.";
-    }catch(x){ e.textContent="Sin conexión con el Google Sheet. Se muestran solo las hojas de este equipo."; }
+      else e.textContent="No se pudo buscar en el sistema. Se muestran solo los pesajes guardados en este equipo.";
+    }catch(x){ e.textContent="No hay internet. Se muestran solo los pesajes guardados en este equipo."; }
   }
   // las hojas locales (más recientes) reemplazan a las del servidor con el mismo id
   const loc=HOJAS.filter(h=>h.fecha===fecha&&normPlaca(h.placa)===placa&&vj(h.viaje)===viaje);
@@ -1915,8 +1915,8 @@ async function compartirPDF(btn){
       return;
     }
     const a=document.createElement("a"); a.href=URL.createObjectURL(P.file); a.download=P.file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-    btn.textContent=txt0; toast("Este equipo no permite compartir archivos: se descargó el PDF para adjuntarlo en WhatsApp.");
-  }catch(e){ btn.disabled=false; btn.textContent=txt0; toast("No se pudo generar el PDF. Reintente."); }
+    btn.textContent=txt0; toast("No se pudo abrir WhatsApp desde este equipo. El PDF se guardó en Descargas: adjúntelo desde WhatsApp.");
+  }catch(e){ btn.disabled=false; btn.textContent=txt0; toast("No se pudo crear el PDF. Intente de nuevo."); }
 }
 function officialHTML(fecha,placa,filas,tipoRes){
   const kg=new Map(filas.map(r=>[r.key,r.total]));
@@ -2098,14 +2098,14 @@ function aprobHTML(hayPesadas,sinHoja){
       <div id="a-err" class="warnbox hidden"></div>
     </div></div>`;
 }
-const ERR_APR={clave_requerida:"Ingrese su clave para confirmar.",clave_incorrecta:"La clave es incorrecta.",bloqueado:"Demasiados intentos fallidos. Espere 10 minutos.",permiso:"Su rol no permite esta acción.",sesion:"La sesión venció. Ingrese nuevamente.",sin_datos_despacho:"Faltan los datos del despacho (empresa y tipo de manejo).",ya_aprobado:"Despacho ya aprobado.",sin_pesadas:"Sin pesadas para aprobar.",clave:"La clave configurada en el Google Sheet no coincide.",aprobado:"Despacho ya aprobado."};
+const ERR_APR={clave_requerida:"Ingrese su clave para confirmar.",clave_incorrecta:"La clave es incorrecta.",bloqueado:"Demasiados intentos fallidos. Espere 10 minutos.",permiso:"Su usuario no tiene permiso para esta acción.",sesion:"La sesión venció. Ingrese nuevamente.",sin_datos_despacho:"Faltan datos del despacho (empresa y tipo de manejo). Complételos e intente de nuevo.",ya_aprobado:"Este despacho ya fue aprobado.",sin_pesadas:"No hay pesadas para aprobar.",clave:"La app no está bien configurada. Avise al administrador.",aprobado:"Este despacho ya fue aprobado."};
 async function aprobarDesp(){
   const box=$("#a-box"), modo=box.dataset.modo, e=$("#a-err");
   const err=m=>{ e.textContent=m; e.classList.remove("hidden"); };
   e.classList.add("hidden");
   const nombre=SES?SES.nombre:"";
   if(!can(modo)) return err("Su rol no permite esta acción.");
-  if(!navigator.onLine) return err("Requiere conexión con el Google Sheet.");
+  if(!navigator.onLine) return err("Necesita internet. Conéctese e intente de nuevo.");
   const [fecha,placa,vv]=DKEY.split("|"), viaje=vj(vv);
   if(modo==="aprobar"){
     const ab=DHOJAS.filter(h=>h.estado!=="cerrada"&&(h.pesadas||[]).length).map(h=>h.puerta);
@@ -2133,7 +2133,7 @@ async function aprobarDesp(){
     if(j&&j.error==="faltan") return err("Falta: "+(j.faltan||[]).join(", ")+".");
     if(j&&j.error==="residuo_sin_columna") return err("Estos residuos no tienen columna en el Registro Interno: "+(j.residuos||[]).join(", ")+".");
     err(ERR_APR[j&&j.error]||("No se pudo completar ("+((j&&j.error)||"error")+")."));
-  }catch(x){ err("Sin conexión con el Google Sheet. Reintentar."); }
+  }catch(x){ err("No hay internet. Intente de nuevo."); }
   finally{ const b2=$("#a-ok"); if(b2){ b2.disabled=false; b2.textContent=modo==="aprobar"?"Aprobar":"Reabrir"; } }
 }
 
@@ -2152,14 +2152,14 @@ async function reabrirDesdeHoja(){
       return toast("Despacho reabierto. Corrige los pesos, cierra la hoja y vuelve a aprobar el despacho.");
     }
     e.textContent=ERR_APR[j&&j.error]||("No se pudo reabrir ("+((j&&j.error)||"error")+").");
-  }catch(x){ e.textContent="Sin conexión con el Google Sheet. Reintentar."; }
+  }catch(x){ e.textContent="No hay internet. Intente de nuevo."; }
   finally{ const b2=$("#hh-rok"); if(b2){ b2.disabled=false; b2.textContent="🔓 Reabrir despacho para corregir"; } }
 }
 $("#hh-rok").addEventListener("click",reabrirDesdeHoja);
 
 /* ---------- administración del catálogo (Inspector y Administrador) ---------- */
 let CATADM=[], CATAD_EDIT=null, CATAD_META={categorias:[],manejos:[]};
-const ERR_CAT={nombre_base:"El nombre de los residuos originales no se cambia.",no_existe:"El residuo ya no existe en el catálogo. Recargue la lista.",nombre_invalido:"Ingrese el nombre del residuo (hasta 120 caracteres).",categoria_invalida:"Elija una categoría de la lista.",codigo_invalido:"Código SAP inválido: use solo letras, números, punto o guion (máx. 20).",nombre_existe:"Ya existe un residuo con ese nombre.",manejo_invalido:"Elija el manejo.",permiso:"Su rol no permite esta acción."};
+const ERR_CAT={nombre_base:"El nombre de los residuos originales no se cambia.",no_existe:"El residuo ya no existe en el catálogo. Recargue la lista.",nombre_invalido:"Ingrese el nombre del residuo (hasta 120 caracteres).",categoria_invalida:"Elija una categoría de la lista.",codigo_invalido:"Código SAP inválido: use solo letras, números, punto o guion (máx. 20).",nombre_existe:"Ya existe un residuo con ese nombre.",manejo_invalido:"Elija el manejo.",permiso:"Su usuario no tiene permiso para esta acción."};
 function catFormReset(){
   CATAD_EDIT=null; $("#c-tit").textContent="Nuevo residuo"; $("#c-nom").value=""; $("#c-nom").readOnly=false; $("#c-cod").value=""; $("#c-act").checked=true; $("#c-err").textContent="";
   $("#c-nota").textContent=""; $("#c-cancel").classList.add("hidden"); $("#c-man").disabled=false;
@@ -2188,7 +2188,7 @@ function drawCatList(){
 }
 async function drawCatAdm(){
   const L=$("#c-list");
-  if(!navigator.onLine) return void(L.textContent="Requiere conexión con el Google Sheet.");
+  if(!navigator.onLine) return void(L.textContent="Necesita internet. Conéctese e intente de nuevo.");
   try{
     const j=await postJ({key:CFG.CLAVE,action:"catalogo_admin"},30000);
     if(!j||!j.ok) return void(L.textContent="No se pudo cargar ("+((j&&j.error)||"error")+").");
@@ -2198,7 +2198,7 @@ async function drawCatAdm(){
     if(sc) $("#c-cat").value=sc; if(sm) $("#c-man").value=sm;
     drawCatList();
     drawFormato(j);
-  }catch(x){ L.textContent="Sin conexión con el Google Sheet."; }
+  }catch(x){ L.textContent="No hay internet."; }
 }
 function catEditar(name){
   const r=CATADM.find(x=>x.name===name); if(!r) return;
@@ -2226,17 +2226,17 @@ function drawFormato(j){
 const ERR_FMT={codigo_invalido:"Código inválido.",version_invalida:"Versión inválida.",fecha_invalida:"Fecha de aprobación: use dd/mm/aaaa.",permiso:"No tiene permiso para esta acción."};
 async function formatoOp(body,msg){
   const e=$("#f-err"); e.textContent="";
-  if(!navigator.onLine) return void(e.textContent="Requiere conexión con el Google Sheet.");
+  if(!navigator.onLine) return void(e.textContent="Necesita internet. Conéctese e intente de nuevo.");
   try{ const j=await postJ(Object.assign({key:CFG.CLAVE},body),60000);
     if(!j||!j.ok) return void(e.textContent=ERR_FMT[j&&j.error]||"No se pudo guardar ("+((j&&j.error)||"error")+").");
     toast(msg); await drawCatAdm();
-  }catch(x){ e.textContent="Sin conexión con el Google Sheet."; }
+  }catch(x){ e.textContent="No hay internet."; }
 }
 async function catGuardar(extra){
   const e=$("#c-err"); e.textContent="";
   const b=Object.assign({key:CFG.CLAVE,action:"catalogo_guardar",name:$("#c-nom").value.trim(),cat:$("#c-cat").value,cod:$("#c-cod").value.trim(),manejo:CATAD_EDIT?"":$("#c-man").value,activo:$("#c-act").checked},CATAD_EDIT?{renombrar:CATAD_EDIT}:{},extra||{});
   if(!b.name) return void(e.textContent=ERR_CAT.nombre_invalido);
-  if(!navigator.onLine) return void(e.textContent="Requiere conexión con el Google Sheet.");
+  if(!navigator.onLine) return void(e.textContent="Necesita internet. Conéctese e intente de nuevo.");
   const bt=$("#c-save"); bt.disabled=true; bt.textContent="Guardando…";
   try{
     const j=await postJ(b,60000);
@@ -2247,7 +2247,7 @@ async function catGuardar(extra){
     }
     toast((j.nuevo?"Residuo agregado: ya está disponible en la app.":"Residuo actualizado.")+(j.formato?" Revise el control de cambios del formato.":"")); catFormReset(); await drawCatAdm(); cargaCatalogo();
     if(j.formato) $("#f-card").scrollIntoView({behavior:"smooth",block:"center"});
-  }catch(x){ e.textContent="Sin conexión con el Google Sheet."; }
+  }catch(x){ e.textContent="No hay internet."; }
   finally{ bt.disabled=false; bt.textContent="Guardar"; }
 }
 
@@ -2261,18 +2261,18 @@ function drawPlantas(){
       <div class="acts"><button class="btn sec sm2" data-plsave="${esc(p.planta)}">Guardar lugares</button>${p.planta!==BASE?`<button class="btn sec sm2" data-plact="${esc(p.planta)}">${act?"Desactivar":"Activar"}</button>`:""}${p.url?`<a class="btn sec sm2" style="text-decoration:none" href="${esc(p.url)}" target="_blank" rel="noopener">Abrir su Google Sheet</a>`:""}</div></div>`; }).join("")||"Sin plantas.";
 }
 async function plaOp(body,msg,ms){
-  if(!navigator.onLine){ toast("Requiere conexión con el Google Sheet."); return null; }
+  if(!navigator.onLine){ toast("Necesita internet. Conéctese e intente de nuevo."); return null; }
   try{ const j=await postJ(Object.assign({key:CFG.CLAVE},body),ms||60000);
     if(j&&j.ok){ if(msg) toast(msg); await cargaPlantas(); drawPlantas(); return j; }
     toast(ERR_PLA[j&&j.error]||"No se pudo completar ("+((j&&j.error)||"error")+")."); return null;
-  }catch(x){ toast("Sin conexión con el Google Sheet."); return null; }
+  }catch(x){ toast("No hay internet."); return null; }
 }
 async function crearPlanta(){
   const e=$("#pl-err"); e.textContent="";
   const planta=$("#pl-nom").value.trim().replace(/\s+/g," "), lugares=lugTxt($("#pl-lug").value);
   if(planta.length<3) return void(e.textContent=ERR_PLA.nombre_invalido);
   if(!lugares.length) return void(e.textContent=ERR_PLA.lugares_invalidos);
-  if(!navigator.onLine) return void(e.textContent="Requiere conexión con el Google Sheet.");
+  if(!navigator.onLine) return void(e.textContent="Necesita internet. Conéctese e intente de nuevo.");
   const bt=$("#pl-crear"); bt.disabled=true; bt.textContent="Creando su Google Sheet…";
   try{
     const j=await postJ({key:CFG.CLAVE,action:"planta_crear",planta,lugares},240000);
@@ -2302,20 +2302,20 @@ function showLogin(msg){
 }
 function needLogin(msg){ SES=null; LS.set(SESK,null); drawUser(); showLogin(msg); }
 function setSes(j){ SES={token:j.token,exp:j.exp,usuario:j.usuario,nombre:j.nombre,rol:j.rol,cambiar:!!j.cambiar,areas:j.areas||[]}; LS.set(SESK,SES); }
-const ERR_LOGIN={credenciales:"Usuario o contraseña incorrectos.",bloqueado:"Demasiados intentos fallidos. Espere 10 minutos.",clave:"La clave de la app no coincide con la del Google Sheet."};
+const ERR_LOGIN={credenciales:"Usuario o contraseña incorrectos.",bloqueado:"Demasiados intentos fallidos. Espere 10 minutos.",clave:"La app no está bien configurada. Avise al administrador."};
 async function doLogin(ev){
   ev.preventDefault();
   const u=$("#lg-u").value.trim().toLowerCase(), c=$("#lg-p").value, e=$("#lg-err"); e.textContent="";
   if(!u||!c) return void(e.textContent="Ingrese usuario y contraseña.");
-  if(!navigator.onLine) return void(e.textContent="Se requiere conexión para iniciar sesión.");
+  if(!navigator.onLine) return void(e.textContent="Necesita internet para ingresar.");
   const b=$("#lg-go"); b.disabled=true; b.textContent="Ingresando…";
   try{
     const j=await postJ({key:CFG.CLAVE,action:"login",usuario:u,clave:c},30000);
-    if(!j||!j.ok) return void(e.textContent=ERR_LOGIN[j&&j.error]||"No se pudo ingresar ("+((j&&j.error)||"error")+").");
+    if(!j||!j.ok) return void(e.textContent=ERR_LOGIN[j&&j.error]||"No se pudo ingresar. Intente de nuevo.");
     setSes(j); $("#login").classList.add("hidden"); $("#lg-p").value="";
     OP={v:"inicio",k:null}; setMod(null); drawUser(); drawHome(); showView();
     if(SES.cambiar) openCta(true); else { cargaPlantas(); sync(); cargaCatalogo(); refrescaDia(); }
-  }catch(x){ e.textContent="Sin conexión con el Google Sheet."; }
+  }catch(x){ e.textContent="No hay internet."; }
   finally{ b.disabled=false; b.textContent="Ingresar"; }
 }
 let CTAF=false;
@@ -2333,19 +2333,19 @@ async function doCta(ev){
   const a=$("#cta-a").value, n=$("#cta-n").value, r=$("#cta-r").value;
   if(!a||!n) return void(e.textContent="Complete los campos.");
   if(n!==r) return void(e.textContent="La contraseña nueva no coincide con su repetición.");
-  if(!navigator.onLine) return void(e.textContent="Se requiere conexión.");
+  if(!navigator.onLine) return void(e.textContent="Necesita internet.");
   try{
     const j=await postJ({key:CFG.CLAVE,action:"cambiarClave",actual:a,nueva:n},30000);
     if(!j||!j.ok) return void(e.textContent=ERR_CTA[j&&j.error]||"No se pudo cambiar ("+((j&&j.error)||"error")+").");
     setSes(j); $("#cta").classList.add("hidden"); drawUser(); drawHome(); showView(); toast("Contraseña actualizada."); cargaPlantas(); sync(); cargaCatalogo();
-  }catch(x){ e.textContent="Sin conexión con el Google Sheet."; }
+  }catch(x){ e.textContent="No hay internet."; }
 }
 function cerrarSesion(){
   const n=HOJAS.filter(h=>dirty(h)&&!ajena(h)).length+Object.keys(LS.get(DESPQ,{})).length;
   if(n&&!confirm("Hay "+n+" registro"+(n>1?"s":"")+" por enviar. Se enviarán cuando vuelva a iniciar sesión con conexión.\n¿Cerrar sesión?")) return;
   descartaNueva(); H=null; TAB="hoja"; setMod(null); OP={v:"inicio",k:null}; needLogin(); showView();
 }
-const ERR_USR={usuario_invalido:"Usuario inválido: use 3 a 30 letras minúsculas, números, punto o guion bajo.",nombre_invalido:"Ingrese nombre y apellido.",rol_invalido:"Rol inválido.",clave_corta:"La contraseña temporal debe tener entre 4 y 64 caracteres.",usuario_existe:"Ya existe ese usuario.",usuario_no_existe:"El usuario no existe.",propio:"No puede desactivarse ni cambiar su propio rol.",ultimo_admin:"Debe quedar al menos un Administrador activo.",permiso:"Su rol no permite esta acción."};
+const ERR_USR={usuario_invalido:"Usuario inválido: use 3 a 30 letras minúsculas, números, punto o guion bajo.",nombre_invalido:"Ingrese nombre y apellido.",rol_invalido:"Rol inválido.",clave_corta:"La contraseña temporal debe tener entre 4 y 64 caracteres.",usuario_existe:"Ya existe ese usuario.",usuario_no_existe:"El usuario no existe.",propio:"No puede desactivarse ni cambiar su propio rol.",ultimo_admin:"Debe quedar al menos un Administrador activo.",permiso:"Su usuario no tiene permiso para esta acción."};
 function claveAzar(){ const A="abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789", b=new Uint8Array(10); crypto.getRandomValues(b); return [...b].map(x=>A[x%A.length]).join(""); }
 let USRS=[];
 function drawUsrPlantas(){
@@ -2357,7 +2357,7 @@ async function drawUsuarios(){
   drawUsrPlantas();
   if(typeof hzCargaAreasUsr==="function") await hzCargaAreasUsr();
   const L=$("#u-list"); if(!$("#u-clv").value) $("#u-clv").value=claveAzar();
-  if(!navigator.onLine) return void(L.textContent="Requiere conexión con el Google Sheet.");
+  if(!navigator.onLine) return void(L.textContent="Necesita internet. Conéctese e intente de nuevo.");
   try{
     const j=await postJ({key:CFG.CLAVE,action:"usuarios_listar"},30000);
     if(!j||!j.ok) return void(L.textContent="No se pudo cargar ("+((j&&j.error)||"error")+").");
@@ -2371,23 +2371,23 @@ async function drawUsuarios(){
       <button class="btn sec sm2" data-unom="${esc(u.usuario)}">Cambiar nombre</button>
       <button class="btn sec sm2" data-ures="${esc(u.usuario)}">Resetear contraseña</button>
       <button class="btn sec sm2" data-uact="${esc(u.usuario)}">${u.activo?"Desactivar":"Activar"}</button>${SES&&SES.usuario!==u.usuario?`<button class="btn sec sm2 del" data-udel="${esc(u.usuario)}">Eliminar</button>`:""}</div></div>`).join("")||"Sin usuarios.";
-  }catch(x){ L.textContent="Sin conexión con el Google Sheet."; }
+  }catch(x){ L.textContent="No hay internet."; }
 }
 async function drawActividad(){
   const L=$("#a-list");
-  if(!navigator.onLine) return void(L.textContent="Requiere conexión con el Google Sheet.");
+  if(!navigator.onLine) return void(L.textContent="Necesita internet. Conéctese e intente de nuevo.");
   try{
     const j=await postJ({key:CFG.CLAVE,action:"actividad_listar"},30000);
     if(!j||!j.ok) return void(L.textContent="No se pudo cargar ("+((j&&j.error)||"error")+").");
     const fh=t=>{ const d=new Date(t); return isNaN(d)?esc(String(t)):new Intl.DateTimeFormat("es-PE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false,timeZone:CFG.ZONA_HORARIA}).format(d); };
     L.innerHTML=j.filas.map(f=>`<div class="arow"><b>${esc(f.accion)}</b>${esc(f.detalle)}<div class="muted">${fh(f.fecha)} · ${esc(f.usuario)} (${esc(f.rol)})</div></div>`).join("")||"Sin movimientos todavía.";
-  }catch(x){ L.textContent="Sin conexión con el Google Sheet."; }
+  }catch(x){ L.textContent="No hay internet."; }
 }
 async function usrOp(body,okMsg){
   try{ const j=await postJ(Object.assign({key:CFG.CLAVE},body),30000);
     if(j&&j.ok){ if(okMsg) toast(okMsg); await drawUsuarios(); return true; }
     toast(ERR_USR[j&&j.error]||"No se pudo completar ("+((j&&j.error)||"error")+")."); await drawUsuarios(); return false;
-  }catch(x){ toast("Sin conexión con el Google Sheet."); return false; }
+  }catch(x){ toast("No hay internet."); return false; }
 }
 async function crearUsuario(){
   const e=$("#u-err"); e.textContent="";
@@ -2399,7 +2399,7 @@ async function crearUsuario(){
   if(rol==="Responsable de área"&&typeof hzAreasMarcadas==="function") body.areas=hzAreasMarcadas();
   if(plantasAct().length>1){ body.plantas=[...$("#u-plantas").querySelectorAll("input:checked")].map(i=>i.value); if(body.plantas.includes("*")) body.plantas=["*"]; if(!body.plantas.length&&rol!=="Administrador") return void(e.textContent="Marque al menos una planta."); if(!body.plantas.length) body.plantas=[CFG.PLANTA]; }
   const j=await postJ(body,30000).catch(()=>null);
-  if(!j) return void(e.textContent="Sin conexión con el Google Sheet.");
+  if(!j) return void(e.textContent="No hay internet.");
   if(!j.ok) return void(e.textContent=ERR_USR[j.error]||"No se pudo crear ("+j.error+").");
   alert("Perfil creado.\nUsuario: "+usuario+"\nContraseña temporal: "+clave+"\nEntréguela a la persona: "+($("#u-cambiar").checked?"deberá cambiarla al ingresar.":"podrá seguir usándola (puede cambiarla desde su cuenta)."));
   $("#u-nom").value=""; $("#u-usr").value=""; $("#u-clv").value=claveAzar(); drawUsuarios();
