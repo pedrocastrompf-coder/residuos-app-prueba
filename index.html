@@ -1878,12 +1878,12 @@ async function consultarDespacho(){
   const fecha=$("#d-fecha").value, placa=normPlaca($("#d-placa").value), viaje=vj($("#d-viaje").value), e=$("#d-err"); e.textContent="";
   $("#d-viaje").value=viaje; DVIAJE=viaje;
   if(!fecha||placa.length<5) return void(e.textContent="Seleccione la fecha e ingrese la placa.");   // (se llega aquí con placa completa y viaje)
-  let hojas=[], origen="Solo hojas de este equipo"; DSRV=null;
+  let hojas=[], origen="Solo pesajes de este equipo"; DSRV=null;
   if(CFG.SCRIPT_URL && navigator.onLine){
     try{
       const r=await fetchT(`${CFG.SCRIPT_URL}?action=despacho&sede=${encodeURIComponent(CFG.PLANTA)}&fecha=${encodeURIComponent(fecha)}&placa=${encodeURIComponent(placa)}&viaje=${viaje}&key=${encodeURIComponent(CFG.CLAVE)}&token=${encodeURIComponent(tok())}`,{redirect:"follow"},25000);
       const j=await gj(r);
-      if(j&&j.ok){ hojas=j.hojas||[]; DSRV=j.despacho||null; marcaAprob(fecha,placa,!!(DSRV&&DSRV.estado==="Aprobado"),viaje); origen="Hojas de todas las puertas (Google Sheets)"; }
+      if(j&&j.ok){ hojas=j.hojas||[]; DSRV=j.despacho||null; marcaAprob(fecha,placa,!!(DSRV&&DSRV.estado==="Aprobado"),viaje); origen="Pesajes de todas las puertas"; }
       else e.textContent="No se pudo buscar en el sistema. Se muestran solo los pesajes guardados en este equipo.";
     }catch(x){ e.textContent="No hay internet. Se muestran solo los pesajes guardados en este equipo."; }
   }
@@ -1993,8 +1993,8 @@ function drawDespacho(fecha,placa,hojas,origen){
   modoDetalle(true);
   const {porPuerta,filas}=buildDespacho(hojas);
   const st=porPuerta.map(p=>{ const hs=hojas.filter(h=>h.puerta===p);
-    if(!hs.length) return `<span class="no">${esc(p)}: sin hoja</span>`;
-    return hs.every(h=>h.estado==="cerrada")?`<span class="ok">${esc(p)}: cerrada</span>`:`<span class="ab">${esc(p)}: abierta</span>`; }).join("");
+    if(!hs.length) return `<span class="no">${esc(p)}: sin pesaje</span>`;
+    return hs.every(h=>h.estado==="cerrada")?`<span class="ok">${esc(p)}: terminada</span>`:`<span class="ab">${esc(p)}: abierta</span>`; }).join("");
   const pend=filas.reduce((a,r)=>a+r.pend,0);
   let body="", last="";
   filas.forEach(r=>{
@@ -2445,7 +2445,7 @@ document.addEventListener("click",e=>{
   const pu=t.closest("[data-p]"); if(pu&&pu.parentElement.id==="n-puerta"){ selPuerta=pu.dataset.p; $$("#n-puerta button").forEach(b=>b.classList.toggle("on",b===pu)); return; }
   if(t.closest("#b-new")){ openNew(); if($("#n-card").classList.contains("open")) $("#n-card").scrollIntoView({behavior:"smooth",block:"start"}); return; }
   const np=t.closest("[data-newp]"); if(np){ const [p,f,pl,vv]=np.dataset.newp.split("|"); selPuerta=p; $("#n-fecha").value=f; $("#n-placa").value=pl; TAB="hoja"; H=null; showView(); drawHome(); openNew(true); startHoja(vv); return; }
-  const gd=t.closest("[data-gdesp]"); if(gd){ const [f,pl,vv]=gd.dataset.gdesp.split("|"); $("#d-fecha").value=f; $("#d-placa").value=pl; $("#d-viaje").value=vj(vv); TAB="desp"; showView(); if(CFG.SCRIPT_URL&&navigator.onLine) toast("Consultando el Google Sheet…"); consultarDespacho().then(()=>window.scrollTo({top:0})); return; }
+  const gd=t.closest("[data-gdesp]"); if(gd){ const [f,pl,vv]=gd.dataset.gdesp.split("|"); $("#d-fecha").value=f; $("#d-placa").value=pl; $("#d-viaje").value=vj(vv); TAB="desp"; modoDetalle(true); $("#d-out").innerHTML='<div class="card muted" style="text-align:center;padding:32px 16px">Cargando el despacho…</div>'; showView(); window.scrollTo({top:0}); consultarDespacho().then(()=>window.scrollTo({top:0})); return; }
   if(t.closest("#d-back")){ modoDetalle(false); if(SIMPLE()){ DKEY=""; $("#d-placa").value=""; TAB="hoja"; OP={v:"inicio",k:null}; showView(); return; } drawHojas(); window.scrollTo({top:0}); return; }
   const sc=t.closest("[data-svcerrar]"); if(sc){ const h=HOJAS.find(x=>x.id===sc.dataset.svcerrar); if(h&&h.estado!=="cerrada"&&confirm("¿Cerrar la hoja de "+h.puerta+" de "+h.responsable+"?\nSi esa persona sigue pesando, tendrá que reabrirla.")){ h.estado="cerrada"; saveHoja(h).then(()=>{ drawHojas(); toast("Hoja cerrada."); }); } return; }
   const dh=t.closest("[data-delh]"); if(dh&&can("borrarHoja")){ const h=HOJAS.find(x=>x.id===dh.dataset.delh); if(h&&!(h.pesadas||[]).length&&confirm("¿Eliminar la hoja vacía de "+h.puerta+" ("+h.placa+")?")){ dh.classList.add("busy"); borrarHojaVacia(h); } return; }
