@@ -27,7 +27,7 @@ window.APP_CONFIG = {
   TIPOS_MANEJO: ["Comercialización - Disposición final","Comercialización","Disposición final","Donación (Aniquem)","Valorización","Tratamiento - Valorización - Disp. final"],
 
   // Hallazgos ambientales: tipos y niveles de riesgo (deben coincidir con los de Hallazgos.gs)
-  TIPOS_HALLAZGO: ["Residuos","Agua y efluentes","Emisiones y olores","Derrames y químicos","Energía","Orden y limpieza","Otro"],
+  TIPOS_HALLAZGO: ["Segregación de residuos","Almacenamiento y acopio","Derrames y fugas","Efluentes y desagües","Orden y limpieza","Uso de agua y energía","Otro"],
   RIESGOS_HALLAZGO: ["Bajo","Medio","Alto"],
 
   // Unidades de conteo (opcional en cada pesada)
