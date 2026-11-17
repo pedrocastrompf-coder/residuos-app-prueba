@@ -1178,6 +1178,7 @@ function showView(){
   if(!hub){ setMod(av.length?av[0].id:"rs"); if(TAB==="menu") TAB=(MODS.find(m=>m.id===MOD).tabs[0]||"hoja"); }
   else if(!MOD||!av.some(m=>m.id===MOD)){ setMod(null); TAB="menu"; }
   else if(TAB==="menu"&&MOD) TAB="menu";
+  { const m0=MODS.find(m=>m.id===MOD); if(m0&&m0.tabs.length&&TAB!=="menu"&&!m0.tabs.includes(TAB)) TAB=m0.tabs[0]; }   // al recargar dentro de un módulo se abre su primera pestaña
   if(TAB==="usr"&&!can("usuarios")) TAB="hoja";
   if(TAB==="cat"&&!can("catalogo")) TAB="hoja";
   if(TAB==="pla"&&!can("plantas")) TAB="hoja";
