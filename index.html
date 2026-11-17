@@ -1092,7 +1092,7 @@ function payloadDe(h){
 let syncing=null, lastErr="";
 const DESPQ="pesaje.despq";    // despachos con datos por enviar: {clave: payload}
 async function postJ(obj,ms=60000){
-  const r=await fetchT(CFG.SCRIPT_URL,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({sede:CFG.PLANTA},obj,obj.action==="login"?{}:{token:tok()}))},ms);
+  const r=await fetchT(CFG.SCRIPT_URL,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({sede:CFG.PLANTA,key:CFG.CLAVE},obj,obj.action==="login"?{}:{token:tok()}))},ms);
   const j=await r.json(); if(obj.action!=="login") sesionErr(j); return j;
 }
 async function syncRun(){
