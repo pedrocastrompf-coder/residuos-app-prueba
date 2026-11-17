@@ -473,12 +473,19 @@ body{background:var(--bg)}
 @media(max-width:520px){ .bar h1 #ptitle{font-size:15px} }
 /* menú lateral premium */
 .tab.xmod{display:none!important}
-.mhub{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));padding:8px 0}
-.mcard{display:flex;flex-direction:column;gap:6px;text-align:left;padding:22px 20px;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:var(--sh1);color:var(--ink,#2b1d12);min-height:120px}
-.mcard b{font-size:17px}.mcard small{color:var(--mute);font-size:13px}
-.mcard.soon{opacity:.55;cursor:default}
+.mhub{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));padding:6px 0 24px}
+.mhi{grid-column:1/-1;padding:14px 4px 4px}.mhi h2{margin:0;font-size:28px;letter-spacing:-.02em}.mhi p{margin:4px 0 0;color:var(--mute);font-size:15px}
+.mcard{position:relative;display:flex;flex-direction:column;gap:4px;text-align:left;padding:22px;border:1px solid rgba(0,0,0,.06);border-radius:22px;background:#fff;box-shadow:0 1px 2px rgba(60,40,20,.05),0 8px 24px -12px rgba(60,40,20,.18);color:var(--ink,#2b1d12);min-height:150px;transition:transform .18s,box-shadow .18s;overflow:hidden}
+.mcard:hover,.mcard:active{transform:translateY(-3px);box-shadow:0 2px 4px rgba(60,40,20,.06),0 18px 34px -14px rgba(60,40,20,.30)}
+.mcard .ic{width:50px;height:50px;border-radius:16px;display:grid;place-items:center;margin-bottom:12px;color:#fff;background:linear-gradient(135deg,var(--c1),var(--c2))}
+.mcard .ic svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mcard b{font-size:18px;letter-spacing:-.01em}.mcard small{color:var(--mute);font-size:13.5px}
+.mcard .go{position:absolute;right:18px;top:20px;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:#f4eee8;color:var(--brown);font-size:16px;transition:background .18s,color .18s}
+.mcard:hover .go{background:var(--brown);color:#fff}
+.mcard.soon{opacity:.6;cursor:default;box-shadow:none;background:#faf8f5;border-style:dashed}.mcard.soon:hover{transform:none}
+.mcard.soon .ic{background:#d9cfc4}
 body.inmenu .tabs{display:none}
-body.inmenu #app{margin:0 auto!important;max-width:900px!important}
+body.inmenu #app{margin:0 auto!important;max-width:1000px!important}
 .navmenu{font-weight:600;border:1px solid rgba(255,255,255,.35)!important}
 .navlogo,.navcol{display:none}
 @media(min-width:1024px){
@@ -1124,6 +1131,7 @@ let tT; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add
 /* ---------- navegación ---------- */
 let TAB="hoja";
 let MOD=null; try{ MOD=sessionStorage.getItem("mod")||null; }catch(e){}
+const MICO={"rs": ["#6B4423", "#A0673A", "<svg viewBox=\"0 0 24 24\"><path d=\"M3 6h18M5 6l1 14h12l1-14M9 6V4h6v2M10 10v6M14 10v6\"/></svg>"], "hz": ["#E07B1F", "#F2A33C", "<svg viewBox=\"0 0 24 24\"><path d=\"M12 3 2.5 20h19L12 3zM12 10v4.5M12 17.2v.1\"/></svg>"], "ins": ["#2E8B57", "#58B77C", "<svg viewBox=\"0 0 24 24\"><rect x=\"5\" y=\"4\" width=\"14\" height=\"17\" rx=\"2\"/><path d=\"M9 4V3h6v1M9 12l2 2 4-4\"/></svg>"], "adm": ["#3F5B8C", "#6B8BC4", "<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1\"/></svg>"]};
 const MODS=[
   {id:"rs",n:"Gestión de residuos",d:"Pesaje, despacho y catálogo",tabs:["hoja","desp","cat"],ok:()=>!RESP()},
   {id:"hz",n:"Reporte de hallazgos",d:"Hallazgos ambientales y áreas",tabs:["hall","are"],ok:()=>can("hallazgo_reportar")},
@@ -1134,7 +1142,11 @@ const modsDisp=()=>AUTH&&SES?MODS.filter(m=>!m.soon&&m.ok()):MODS.filter(m=>m.id
 function setMod(m){ MOD=m; try{ m?sessionStorage.setItem("mod",m):sessionStorage.removeItem("mod"); }catch(e){} }
 function drawMenu(){
   const av=modsDisp().map(m=>m.id), box=$("#menu-body");
-  box.innerHTML=MODS.filter(m=>m.ok()&&(av.includes(m.id)||m.soon)).map(m=>m.soon?`<div class="mcard soon"><b>${m.n}</b><small>${m.d}</small></div>`:`<button class="mcard" data-mod="${m.id}" type="button"><b>${m.n}</b><small>${m.d}</small></button>`).join("");
+  const h=new Date().getHours(), sal=h<12?"Buenos días":h<19?"Buenas tardes":"Buenas noches";
+  const card=m=>{ const [a,b,svg]=MICO[m.id]; const st=`style="--c1:${a};--c2:${b}"`;
+    return m.soon?`<div class="mcard soon" ${st}><span class="ic">${svg}</span><b>${m.n}</b><small>Próximamente</small></div>`
+      :`<button class="mcard" data-mod="${m.id}" type="button" ${st}><span class="ic">${svg}</span><span class="go">→</span><b>${m.n}</b><small>${m.d}</small></button>`; };
+  box.innerHTML=`<div class="mhi"><h2>${sal}${SES&&SES.nombre?", "+esc(String(SES.nombre).split(" ")[0]):""}</h2><p>¿Qué quieres gestionar hoy?</p></div>`+MODS.filter(m=>m.ok()&&(av.includes(m.id)||m.soon)).map(card).join("");
 }
 
 function entraDesp(){ modoDetalle(false); if(!$("#d-fecha").value) $("#d-fecha").value=H?H.fecha:todayStr(); if(!$("#d-placa").value&&H) $("#d-placa").value=H.placa; if(H) $("#d-viaje").value=vj(H.viaje); dlDesp(); }
@@ -1174,6 +1186,7 @@ function showView(){
   const tOn=document.querySelector(".tab.on");      // título de la sección en uso (solo presentación)
   $("#ptitle").textContent = (TAB==="desp"&&SIMPLE()) ? "Despacho" : inHoja ? (SIMPLE()?"Pesaje":"Hoja de pesaje") : (SIMPLE()?"Pesaje de residuos":(tOn?tOn.textContent.trim():"Gestión de residuos sólidos"));
   if(enMenu) $("#ptitle").textContent="Menú principal";
+  $("#sub").style.display=(MOD==="rs"&&!enMenu)?"":"none";   // selector de planta solo en Gestión de residuos
   if(TAB==="hall"){ $("#ptitle").textContent="Hallazgos ambientales"; if(typeof drawHall==="function") drawHall(); }
   if(TAB==="are"){ $("#ptitle").textContent="Áreas"; if(typeof drawAreas==="function") drawAreas(); }
   window.scrollTo(0,0);
