@@ -472,7 +472,10 @@ body{background:var(--bg)}
 .bar small{font-size:12px}
 @media(max-width:520px){ .bar h1 #ptitle{font-size:15px} }
 /* menú lateral premium */
-.navlogo,.navcol,.navsec{display:none}
+.navlogo,.navcol{display:none}
+.navsec{display:block;flex:none;align-self:stretch;width:1px;margin:7px 5px;padding:0;background:var(--line);font-size:0;overflow:hidden;color:transparent}
+.navsec.hidden{display:none}
+@media(max-width:1023px){.navlogo+.navsec{display:none}}
 @media(min-width:1024px){
   body:not(.simple) .tabs{background:linear-gradient(180deg,var(--brown) 0,var(--nav) 100%);padding:16px 12px 16px;gap:4px;transition:width var(--t)}
   body:not(.simple) .tabs::before,body:not(.simple) .tabs::after{content:none}
@@ -487,7 +490,7 @@ body{background:var(--bg)}
   .navcol::before{content:"";width:18px;height:18px;flex:none;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 18-6-6 6-6'/%3E%3C/svg%3E") no-repeat center/contain;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 18-6-6 6-6'/%3E%3C/svg%3E") no-repeat center/contain;transition:transform var(--t)}
   .navcol:hover{background:rgba(255,255,255,.08);color:#fff}
   /* contraído: solo íconos */
-  body:not(.simple) .navsec{display:block;padding:14px 12px 4px;color:rgba(255,255,255,.5);font-size:10.5px;font-weight:650;letter-spacing:.09em;text-transform:uppercase}
+  body:not(.simple) .navsec{display:block;width:auto;align-self:auto;margin:0;background:none;overflow:visible;padding:14px 12px 4px;color:rgba(255,255,255,.5);font-size:10.5px;font-weight:650;letter-spacing:.09em;text-transform:uppercase}
   body:not(.simple) .navsec.hidden{display:none}
   body.navmin:not(.simple) .navsec{font-size:0;padding:8px 0 2px;border-top:1px solid rgba(255,255,255,.12);margin-top:6px}
   body.navmin:not(.simple){--side:76px}
