@@ -473,6 +473,7 @@ body{background:var(--bg)}
 @media(max-width:520px){ .bar h1 #ptitle{font-size:15px} }
 /* menú lateral premium */
 .nxt{padding:12px 14px 14px;border-top:1px solid var(--line);text-align:center}.nxt .btn{width:100%}.nxt .muted{margin-top:6px;font-size:12.5px}
+.opdec{margin-top:14px;gap:10px}.opdec .btn{flex:1;min-height:56px}
 .addp{padding:12px 14px 0;border-top:1px solid var(--line);background:#fbf8f4}
 .addp summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:10px 14px;border:1.5px solid var(--brown);border-radius:12px;background:#fff;color:var(--brown);font-size:14.5px;font-weight:600;text-align:center}
 .addp summary::-webkit-details-marker{display:none}
@@ -631,7 +632,6 @@ input[type=date].in,input[type=time].in{font-variant-numeric:tabular-nums}
         <div class="card newcard" id="n-card">
           <h2>Iniciar despacho</h2>
           <div class="fhd"><i>1</i>Datos del despacho</div>
-          <div class="plwrap"></div>
           <label class="f">Puerta</label>
           <div class="seg" id="n-puerta"></div>
           <div class="row2">
@@ -958,6 +958,7 @@ const tok=()=>SES?SES.token:"";
 const HZ_ROLES=["Administrador"];   // Hallazgos en desarrollo: solo el Administrador (para abrirlo a más roles, ampliar esta lista y en Code.gs la línea «en desarrollo»)
 const PERM={aprobar:["Operador","Inspector","Administrador"],reabrir:["Inspector","Administrador"],manejo:["Operador","Inspector","Administrador"],borrarHoja:["Operador","Inspector","Administrador"],catalogo:["Inspector","Administrador"],plantas:["Inspector","Administrador"],usuarios:["Administrador"],actividad:["Administrador"],hallazgo_reportar:HZ_ROLES,hallazgo_asignar:HZ_ROLES,hallazgo_cerrar:HZ_ROLES,hallazgo_reabrir:HZ_ROLES,areas_admin:HZ_ROLES};
 const SIMPLE=()=>AUTH&&!!SES&&SES.rol==="Operador";
+const OPV=()=>AUTH&&!!SES&&SES.rol!=="Responsable de área";   // mismo flujo de pesaje para Operador, Inspector y Administrador
 const RESP=()=>AUTH&&!!SES&&SES.rol==="Responsable de área";   // solo usa Hallazgos
 const SUPERV=()=>false;   // el Inspector ya pesa: usa la misma vista que el Administrador   // el Inspector supervisa: no pesa, abre en Despacho
 const can=p=>!AUTH||(!!SES&&(PERM[p]||[]).includes(SES.rol));
@@ -1066,7 +1067,7 @@ async function purgaSiReinicio(ver){
   HOJAS=HOJAS.filter(h=>H&&H.id===h.id);
   [APRK,VEHK,DESPQ,VEHS,"pesaje.nums"].forEach(x=>LS.set(x,x===VEHS?{}:{}));
   try{ localStorage.setItem(k,ver); }catch(e){}
-  drawQueue(); drawHojas(); if(SIMPLE()){ OP={v:"inicio",k:null}; drawOp(); }
+  drawQueue(); drawHojas(); if(OPV()){ OP={v:"inicio",k:null}; drawOp(); }
   toast("Se reiniciaron los datos de prueba: este equipo quedó limpio.");
   return true;
 }
@@ -1128,7 +1129,7 @@ function sync(){
 }
 function msgAjena(h){ return "Este pesaje lo inició «"+(h.usuario||h.responsable)+"». Solo esa persona o un Inspector puede cambiarlo."; }
 function estadoHoja(){   // Operador: dice con claridad si lo pesado ya está a salvo
-  if(!H||!SIMPLE()) return;
+  if(!H||!OPV()) return;
   const pend=dirty(H)&&CFG.SCRIPT_URL; let t="";
   if(aprobada(H)) t="🔒 Despacho aprobado: solo se puede ver";
   else if(ajena(H)) t="Solo se puede ver. "+msgAjena(H);
@@ -1186,7 +1187,7 @@ function showView(){
   if(RESP()) TAB="hall";                       // el Responsable de área abre en Hallazgos y no ve Pesaje ni Despacho
   if(TAB==="desp"&&SIMPLE()&&!$("#d-placa").value) TAB="hoja";   // el Operador entra al despacho solo desde su camión
   if(TAB==="hoja"&&SUPERV()&&!H){ TAB="desp"; entraDesp(); }
-  const inHoja = TAB==="hoja" && H, simple=SIMPLE();
+  const inHoja = TAB==="hoja" && H, simple=OPV();
   const enMenu=TAB==="menu"; document.body.classList.toggle("inmenu",enMenu);
   $("#v-menu").classList.toggle("hidden",!enMenu); if(enMenu) drawMenu();
   const mm=MODS.find(m=>m.id===MOD); $$(".tab[data-tab]").forEach(b=>b.classList.toggle("xmod",!!mm&&!mm.tabs.includes(b.dataset.tab)));
@@ -1206,7 +1207,7 @@ function showView(){
   $("#dock").classList.toggle("hidden",!inHoja);
   $$(".tab").forEach(b=>b.classList.toggle("on",b.dataset.tab===TAB));
   const tOn=document.querySelector(".tab.on");      // título de la sección en uso (solo presentación)
-  $("#ptitle").textContent = (TAB==="desp"&&SIMPLE()) ? "Despacho" : inHoja ? (SIMPLE()?"Pesaje":"Hoja de pesaje") : (SIMPLE()?"Pesaje de residuos":(tOn?tOn.textContent.trim():"Gestión de residuos sólidos"));
+  $("#ptitle").textContent = (TAB==="desp"&&SIMPLE()) ? "Despacho" : inHoja ? (OPV()?"Pesaje":"Hoja de pesaje") : (OPV()?"Pesaje de residuos":(tOn?tOn.textContent.trim():"Gestión de residuos sólidos"));
   if(enMenu) $("#ptitle").textContent="Menú principal";
   if(TAB==="hall"){ $("#ptitle").textContent="Hallazgos ambientales"; if(typeof drawHall==="function") drawHall(); }
   if(TAB==="are"){ $("#ptitle").textContent="Áreas"; if(typeof drawAreas==="function") drawAreas(); }
@@ -1229,23 +1230,23 @@ async function cargaPlantas(){
     const A=plantasAct();
     if(A.length&&!A.some(p=>p.planta===CFG.PLANTA)){ LS.set(PLSEL,A[0].planta); return void location.reload(); }   // la planta en uso ya no está disponible para este usuario
     const p=A.find(x=>x.planta===CFG.PLANTA);
-    if(p&&p.lugares.join("|")!==CFG.PUERTAS.join("|")){ CFG.PUERTAS=p.lugares.slice(); if(!CFG.PUERTAS.includes(selPuerta)) selPuerta=""; drawHome(); if(SIMPLE()&&!H) drawOp(); }
+    if(p&&p.lugares.join("|")!==CFG.PUERTAS.join("|")){ CFG.PUERTAS=p.lugares.slice(); if(!CFG.PUERTAS.includes(selPuerta)) selPuerta=""; drawHome(); if(OPV()&&!H) drawOp(); }
     drawPlantaSel(); if(TAB==="pla") drawPlantas(); if(TAB==="usr") drawUsrPlantas();
   }catch(e){}
 }
 function drawPlantaSel(){
   const A=plantasAct();
   // en Despacho (donde se consultan despachos de la planta) el cambio de planta está a la vista en el encabezado
-  if(A.length>1&&MOD==="rs"&&TAB==="desp") $("#sub").innerHTML=`<select id="pl-sel" class="pl-sel" aria-label="Planta">${A.map(p=>`<option${p.planta===CFG.PLANTA?" selected":""}>${esc(p.planta)}</option>`).join("")}</select>`;
+  if(A.length>1&&MOD==="rs"&&TAB!=="menu"&&["hoja","desp","cat"].includes(TAB)) $("#sub").innerHTML=`<select id="pl-sel" class="pl-sel" aria-label="Planta">${A.map(p=>`<option${p.planta===CFG.PLANTA?" selected":""}>${esc(p.planta)}</option>`).join("")}</select>`;
   else $("#sub").textContent=CFG.PLANTA;
-  const html=A.length>1?`<label class="f">Planta</label><select class="in pl-sel" aria-label="Planta">${A.map(p=>`<option${p.planta===CFG.PLANTA?" selected":""}>${esc(p.planta)}</option>`).join("")}</select>`:"";
+  const html=false?`<label class="f">Planta</label><select class="in pl-sel" aria-label="Planta">${A.map(p=>`<option${p.planta===CFG.PLANTA?" selected":""}>${esc(p.planta)}</option>`).join("")}</select>`:"";
   $$(".plwrap").forEach(w=>w.innerHTML=html);
 }
 function cambiaPlanta(n){
   if(n===CFG.PLANTA) return;
   const pend=HOJAS.filter(h=>dirty(h)&&!ajena(h)).length+Object.keys(LS.get(DESPQ,{})).length;
   if(pend){ toast("Todavía hay datos sin enviar de "+CFG.PLANTA+". Espere a que se envíen y vuelva a cambiar de planta."); drawPlantaSel(); sync(); return; }
-  LS.set(PLSEL,n); try{ sessionStorage.setItem("reabre",TAB==="desp"?"desp":"nuevo"); }catch(e){} location.reload();
+  LS.set(PLSEL,n); try{ sessionStorage.setItem("reabre",TAB==="desp"?"desp":""); }catch(e){} location.reload();
 }
 function drawHome(){
   drawPlantaSel();
@@ -1367,7 +1368,7 @@ function drawHojas(){
   $("#h-list").innerHTML=lista(cardP,"Sin hojas registradas en este equipo.");
   $("#d-list").innerHTML=lista(cardD,"Sin despachos registrados en este equipo.");
   drawQueue();
-  if(SIMPLE()&&!H&&TAB==="hoja"&&OP.v!=="nuevo") drawOp();
+  if(OPV()&&!H&&TAB==="hoja"&&OP.v!=="nuevo") drawOp();
 }
 let viajeOk=null;   // viaje nuevo ya confirmado (evita preguntar dos veces mientras se completan los datos del vehículo)
 async function startHoja(viajeFijo){
@@ -1462,18 +1463,20 @@ function drawOp(){
     box.innerHTML=`<div style="margin:6px 0"><button class="btn sec sm" data-op="inicio">← Atrás</button></div>
       <div class="card"><div class="tk" style="border:0;padding:0;margin:0;background:none"><div class="p">${esc(c.placa)}${multi?`<span class="bdg ab">Viaje ${c.viaje}</span>`:""}</div>
       <div class="m">${esc(d.empresa||"")}${d.conductor?" · "+esc(d.conductor):""}${horaTxt(d.hora)?" · llegó "+esc(horaTxt(d.hora)):""}</div></div></div>
-      ${(()=>{ const con=c.hojas.filter(h=>(h.pesadas||[]).length), hecho=con.length&&con.every(h=>h.estado==="cerrada");
-        return hecho?`<div class="opt">✓ Pesaje terminado en ${con.map(h=>esc(h.puerta)).join(", ")}<div class="muted" style="font-weight:400;margin-top:2px">Si este despacho no pasa por otra puerta, ya terminó y sus datos se envían solos. Si pasa por otra, toque esa puerta.</div></div>`
-          :`<div class="opt">Toque la puerta donde va a pesar<div class="muted" style="font-weight:400;margin-top:2px">Puede ser una sola o varias.</div></div>`; })()}
-      <div class="doors">${CFG.PUERTAS.map(p=>{ const h=hojaDe(c,p), aj=h&&ajena(h);
-        const sub=h?`${fmt(kgHoja(h))} kg · ${(h.pesadas||[]).length} pesada${(h.pesadas||[]).length===1?"":"s"}${h.estado==="cerrada"?" · terminada":" · en curso"}${aj?" · "+esc(h.responsable):""}`:"Sin pesar todavía";
-        return `<button class="door ${h?(h.estado==="cerrada"?"ce":"has"):""} ${aj?"lock":""}" data-door="${esc(p)}"><span><b>${esc(p)}</b><small>${sub}</small></span><span class="go">›</span></button>`; }).join("")}</div>
-      ${(()=>{ const vac=c.hojas.filter(h=>!(h.pesadas||[]).length&&!ajena(h)&&can("borrarHoja")); return vac.length?`<div style="margin:4px 0 10px">${vac.map(h=>`<span class="xh" data-delh="${h.id}">✕ eliminar hoja vacía de ${esc(h.puerta)}</span>`).join(" ")}</div>`:""; })()}
-      ${(()=>{ const con=c.hojas.filter(h=>(h.pesadas||[]).length), listo=con.length&&con.every(h=>h.estado==="cerrada");
-        // orden: primero se termina el pesado; recién entonces se genera el registro de despacho
-        return listo
-          ? (can("aprobar")?`<button class="btn xl" data-gdesp="${esc(c.k)}">Generar registro de despacho</button><div class="muted" style="text-align:center;margin-top:8px">Revise los datos, complete manejo y precintos, y apruebe.</div>`:"")
-          : `<div style="border-top:1px solid var(--line);margin:22px 0 14px"></div><button class="btn xl" data-op="fin">Terminé con este despacho</button><div class="muted" style="text-align:center;margin-top:8px">Se cierran todas las puertas y se envían los datos.</div>`; })()}`;
+      ${(()=>{
+        const con=c.hojas.filter(h=>(h.pesadas||[]).length), abiertas=con.filter(h=>h.estado!=="cerrada"&&!ajena(h)), hecho=con.length&&con.every(h=>h.estado==="cerrada");
+        const fila=p=>{ const h=hojaDe(c,p), aj=h&&ajena(h);
+          const sub=h?`${fmt(kgHoja(h))} kg · ${(h.pesadas||[]).length} pesada${(h.pesadas||[]).length===1?"":"s"}${h.estado==="cerrada"?" · terminada":" · en curso"}${aj?" · "+esc(h.responsable):""}`:"Sin pesaje";
+          return `<button class="door ${h?(h.estado==="cerrada"?"ce":"has"):""} ${aj?"lock":""}" data-door="${esc(p)}"><span><b>${esc(p)}</b><small>${sub}</small></span><span class="go">›</span></button>`; };
+        const vac=c.hojas.filter(h=>!(h.pesadas||[]).length&&!ajena(h)&&can("borrarHoja")), xvac=vac.length?`<div style="margin:4px 0 10px">${vac.map(h=>`<span class="xh" data-delh="${h.id}">✕ quitar ${esc(h.puerta)} sin pesadas</span>`).join(" ")}</div>`:"";
+        if(hecho&&!OP.mas){
+          const hs=CFG.PUERTAS.filter(p=>hojaDe(c,p));
+          return `<div class="opt">Pesaje terminado</div><div class="doors">${hs.map(fila).join("")}</div>${xvac}
+            <div class="row2 opdec"><button class="btn sec xl" data-op="mas">Pesar en otra puerta</button>${can("aprobar")?`<button class="btn xl" data-gdesp="${esc(c.k)}">Generar despacho</button>`:""}</div>`;
+        }
+        const ps=OP.mas?CFG.PUERTAS.filter(p=>!hojaDe(c,p)):CFG.PUERTAS;
+        return `<div class="opt">Seleccione la puerta de pesaje</div><div class="doors">${ps.map(fila).join("")}</div>${xvac}
+          ${OP.mas?`<button class="btn sec" data-op="menos" style="margin-top:8px">Cancelar</button>`:(abiertas.length?`<button class="btn xl" data-op="fin" style="margin-top:14px">Terminé con este despacho</button><div class="muted" style="text-align:center;margin-top:8px">Cierra las puertas abiertas y envía los datos.</div>`:"")}`; })()}`;
     return;
   }
   if(OP.v==="buscar") return drawOpBuscar();
@@ -1481,17 +1484,16 @@ function drawOp(){
   const kgC=c=>r2(c.hojas.reduce((a,h)=>a+kgHoja(h),0));
   const card=c=>{ const d=c.d||{}, con=c.hojas.filter(h=>(h.pesadas||[]).length), abiertas=con.filter(h=>h.estado!=="cerrada"), mias=abiertas.filter(h=>!ajena(h));
     const listo=con.length&&!abiertas.length;
-    const tag=c.fecha!==hoy?`<span class="bdg tv">Del ${fechaCorta(c.fecha).slice(0,5)}</span>`:listo?`<span class="bdg ap">pesado</span>`:con.length?`<span class="bdg pe">pesando</span>`:"";
-    const est=listo?"Pesado, sin registro":con.length?(mias.length?"Pesado, sin terminar":"En pesaje"):"Sin pesar todavía";
-    const btn=listo?(can("aprobar")?`<button class="btn" data-gdesp="${esc(c.k)}">Generar registro de despacho</button>`:"")
-      :mias.length?`<button class="btn" data-opfin="${esc(c.k)}">Terminé con este despacho</button>`
-      :`<button class="btn" data-tk="${esc(c.k)}">Continuar pesado</button>`;
+    const tag=c.fecha!==hoy?`<span class="bdg tv">Del ${fechaCorta(c.fecha).slice(0,5)}</span>`:listo?`<span class="bdg ap">Pesado</span>`:con.length?`<span class="bdg pe">En pesaje</span>`:"";
+    const est=con.length?"":"Sin pesaje";
+    const btn=listo?(can("aprobar")?`<button class="btn" data-gdesp="${esc(c.k)}">Generar despacho</button>`:"")
+      :`<button class="btn" data-tk="${esc(c.k)}">Continuar</button>`;
     return `<div class="tkc"><div class="tkh" data-tk="${esc(c.k)}"><div class="p">${esc(c.placa)}${c.viaje>1?`<span class="bdg ab">Viaje ${c.viaje}</span>`:""}${tag}</div>
-      <div class="m">${esc(d.empresa||"")}${d.empresa?" · ":""}${est}${!con.length&&horaTxt(d.hora)?" · llegó "+esc(horaTxt(d.hora)):""}</div><div class="pchs">${chipsPuertas(c)}</div></div>${btn}</div>`; };
+      <div class="m">${esc(d.empresa||"")}${d.empresa&&est?" · ":""}${est}${!con.length&&horaTxt(d.hora)?" · llegó "+esc(horaTxt(d.hora)):""}</div><div class="pchs">${chipsPuertas(c)}</div></div>${btn}</div>`; };
   box.innerHTML=`<button class="btn xl" data-op="nuevo" style="margin-top:6px">＋ Iniciar despacho</button>
     <div class="opt">Pendientes${lista.length?` (${lista.length})`:""}</div>`+
-    (lista.length?lista.map(card).join(""):`<div class="card muted">No hay camiones pendientes. Cuando llegue uno, toque «Iniciar despacho».</div>`)+
-    (aps.length?`<div class="opt">Aprobados hoy (${aps.length})</div>`+aps.map(c=>`<button class="aprow" data-gdesp="${esc(c.k)}"><b>${esc(c.placa)}</b><span class="k">${N[dkey(c.fecha,c.placa,c.viaje)]?numReg(N[dkey(c.fecha,c.placa,c.viaje)])+" · ":""}${fmt(kgC(c))} kg</span><span class="ok">Ver registro ›</span></button>`).join(""):"")+
+    (lista.length?lista.map(card).join(""):`<div class="card muted">No hay despachos pendientes.</div>`)+
+    (aps.length?`<div class="opt">Aprobados hoy (${aps.length})</div>`+aps.map(c=>`<button class="aprow" data-gdesp="${esc(c.k)}"><b>${esc(c.placa)}</b><span class="k">${N[dkey(c.fecha,c.placa,c.viaje)]?numReg(N[dkey(c.fecha,c.placa,c.viaje)])+" · ":""}${fmt(kgC(c))} kg</span><span class="ok">Ver despacho ›</span></button>`).join(""):"")+
     `<button class="opsrch" data-op="buscarreg">🔍 Buscar un despacho anterior</button>${can("hallazgo_reportar")?`<button class="opsrch" data-hz-ir="1">⚠ Reportar un hallazgo ambiental</button>`:""}`;
 }
 /* operario: buscar un despacho anterior por N.° de registro o por fecha */
@@ -1531,7 +1533,6 @@ function drawOpNuevo(){
   const placas=[...new Set(CFG.PLACAS.concat(Object.keys(LS.get(VEHS,{}))))];
   $("#op-body").innerHTML=`<div style="margin:6px 0"><button class="btn sec sm" data-op="inicio">← Atrás</button></div>
     <div class="card opf"><h2>Iniciar despacho</h2>
-      <div class="plwrap"></div>
       <div class="fhd"><i>1</i>Vehículo</div>
       <label class="f" for="op-placa">Placa del vehículo</label>
       <input id="op-placa" class="in placa" list="dl-op" autocapitalize="characters" autocomplete="off" placeholder="ABZ-937"><datalist id="dl-op">${placas.map(p=>`<option value="${esc(p)}">`).join("")}</datalist>
@@ -1680,7 +1681,7 @@ async function cerrarOReabrir(){
   const pend=pendHoja(H);
   if(pend) return toast(`Falta pesar los pallets vacíos de ${pend} pesada${pend>1?"s":""}. Hágalo antes de finalizar.`);
   H.estado="cerrada"; await saveHoja(H);
-  if(SIMPLE()){ OP={v:"camion",k:dkOp(H)}; OPSRCH=false; H=null; showView(); return toast("Pesaje de esta puerta terminado."+(navigator.onLine?" Enviando datos…":" Sin internet: se enviará solo cuando vuelva la señal.")); }
+  if(OPV()){ OP={v:"camion",k:dkOp(H)}; OPSRCH=false; H=null; showView(); return toast("Pesaje de esta puerta terminado."+(navigator.onLine?" Enviando datos…":" Sin internet: se enviará solo cuando vuelva la señal.")); }
   drawHoja();
   toast(CFG.SCRIPT_URL?(navigator.onLine?"Hoja cerrada. Enviando…":"Hoja cerrada. Se enviará cuando haya señal."):"Hoja cerrada (modo local: falta conectar la hoja de Google).");
 }
@@ -2432,6 +2433,8 @@ document.addEventListener("click",e=>{
     else if(a==="nuevo") drawOpNuevo();
     else if(a==="seguir"){ if(opb.classList.contains("busy")) return; opb.classList.add("busy"); const tx=opb.textContent; opb.textContent="Verificando…"; opSeguir().finally(()=>{ if(opb.isConnected){ opb.classList.remove("busy"); opb.textContent=tx; } }); }
     else if(a==="fin") opTerminar();
+    else if(a==="mas"){ OP.mas=true; drawOp(); window.scrollTo(0,0); }
+    else if(a==="menos"){ OP.mas=false; drawOp(); window.scrollTo(0,0); }
     else if(a==="buscarreg"){ OP={v:"buscar",k:null}; drawOp(); window.scrollTo(0,0); }
     else if(a==="obnum"||a==="obfecha"){ if(opb.classList.contains("busy")) return; opb.classList.add("busy"); opBuscar(a==="obnum"?"num":"fecha").finally(()=>opb.classList.remove("busy")); }
     else if(a==="buscar"){ OPSRCH=!OPSRCH; if(!OPSRCH) $("#q").value=""; drawHoja(); if(OPSRCH) $("#q").focus(); }
@@ -2529,7 +2532,7 @@ $("#u-list").addEventListener("click",ev=>{
   if(ac){ const u=ac.dataset.uact, x=USRS.find(z=>z.usuario===u); if(x&&confirm((x.activo?"¿Desactivar a ":"¿Activar a ")+x.nombre+"?")) usrOp({action:"usuario_editar",usuario:u,activo:!x.activo},x.activo?"Usuario desactivado.":"Usuario activado."); }
 });
 $("#n-go").addEventListener("click",()=>startHoja());
-$("#b-back").addEventListener("click",()=>{ if(SIMPLE()){ OP={v:"camion",k:dkOp(H)}; OPSRCH=false; descartaNueva(); H=null; showView(); return; } H=null; drawHome(); showView(); });
+$("#b-back").addEventListener("click",()=>{ if(OPV()){ OP={v:"camion",k:dkOp(H)}; OPSRCH=false; descartaNueva(); H=null; showView(); return; } H=null; drawHome(); showView(); });
 $("#b-close").addEventListener("click",cerrarOReabrir);
 $("#q").addEventListener("input",()=>drawHoja());
 $("#sh-x").addEventListener("click",closeSheet);
