@@ -402,6 +402,8 @@ document.addEventListener("click", ev => {
   const t = ev.target;
   const ir = t.closest("[data-hz-ir]");
   if(ir){ TAB = "hall"; S.vista = "lista"; showView(); return; }
+  const cm = t.closest("[data-hz=\"cerrar-modal\"]"); if(cm){ const m = cm.closest(".hz-modal"); if(m) m.remove(); return; }
+  if(t.classList && t.classList.contains("hz-modal")){ t.remove(); return; }
   if(!t.closest("#v-hall") && !t.closest("#v-are")) return;
   const fl = t.closest("[data-hz-filtro]"); if(fl){ S.filtro = fl.dataset.hzFiltro; pintaLista(); return; }
   const ab = t.closest("[data-hz-abrir]"); if(ab){ abrirHallazgo(ab.dataset.hzAbrir); return; }
