@@ -58,6 +58,8 @@ st.textContent = `
 .in-sg button{border:0;background:#fff;color:var(--brown);padding:7px 10px;font-weight:bold;font-size:13px;min-width:44px}
 .in-sg button.on.C{background:var(--ok);color:#fff} .in-sg button.on.NC{background:var(--red);color:#fff} .in-sg button.on.NA{background:#8a8077;color:#fff}
 .in-pt{border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0;background:#faf7f3}
+.in-lb{display:flex;align-items:center;gap:8px}
+.in-dot{width:13px;height:13px;border-radius:50%;border:1px solid #b9ada0;flex:none}
 .in-pt .c{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:5px 0;font-size:13.5px}
 .in-crit{border-top:1px solid var(--line);padding:8px 0}
 .in-crit .t{font-size:14px;margin-bottom:6px}.in-crit .n{font-weight:bold;color:var(--brown)}
@@ -157,6 +159,8 @@ function pintaDetalle(){
     `<div class="hz-kv"><span>Inspector</span><span>${esc(i.inspectorNombre)}</span><span>Responsable</span><span>${esc(i.respNombre)}${i.respCargo ? " · " + esc(i.respCargo) : ""}</span><span>Hallazgos</span><span>${(i.hallazgos || []).length ? esc(i.hallazgos.join(", ")) : "Ninguno"}</span></div>` +
     `<div class="in-card"><h3>Criterios</h3>${(i.criterios || []).map(c => `<div class="in-crit"><span class="n">${c.n}.</span> ${esc(CRIT[c.n])} — <b>${esc(c.r)}</b>${c.obs ? `<div class="s">${esc(c.obs)}</div>` : ""}${c.accion ? `<div class="s">Acción: ${esc(c.accion)} · Responsable: ${esc(c.responsable || "")} · Plazo: ${esc(fecha(c.plazo))}</div>` : ""}</div>`).join("")}</div>`;
 }
+// colores de contenedores según la NTP 900.058 (los demás puntos no tienen color)
+const NTP = {noaprov:"#1f1f1f", organico:"#8b5a2b", papel:"#1f5fbf", plastico:"#ffffff", vidrio:"#2e8b3d", metal:"#f2c200", peligroso:"#d32f2f"};
 const sgCell = (i, k, val) => `<span class="in-sg">${RESP.map(([v]) => `<button type="button" data-in-c="${i}|${k}" data-v="${v}" class="${v}${val === v ? " on" : ""}">${v === "NA" ? "N/A" : v}</button>`).join("")}</span>`;
 
 function pintaForm(){
@@ -169,7 +173,7 @@ function pintaForm(){
     <div class="in-g"><div><label class="f">Fecha</label><div class="in-ro">${esc(fecha(F.t0.slice(0,10)))}</div></div><div><label class="f">Hora</label><div class="in-ro">${esc(F.t0.slice(11,16))}</div></div><div class="in-g-w"><label class="f">Inspector</label><div class="in-ro">${esc(SES ? SES.nombre : "")}</div></div></div></div>`;
   const secB = `<div class="in-card"><h3>B. Puntos de segregación</h3><p class="s">Un punto es un grupo de contenedores. Marque cada casilla: C (conforme), NC (no conforme) o N/A (no aplica).</p>` +
     F.puntos.map((pt, i) => `<div class="in-pt"><div style="display:flex;gap:6px"><input class="in" data-in-pn="${i}" value="${esc(pt.nombre)}" maxlength="40" style="flex:1;width:auto;min-width:0"><button type="button" class="btn sec sm" data-in-pq="${i}">Quitar</button></div>` +
-      COLS.map(([k, t]) => `<div class="c"><span>${t}</span>${sgCell(i, k, pt.c[k])}</div>`).join("") + `</div>`).join("") +
+      COLS.map(([k, t]) => `<div class="c"><span class="in-lb"><i class="in-dot" ${NTP[k] ? `style="background:${NTP[k]}"` : `style="visibility:hidden"`}></i>${t}</span>${sgCell(i, k, pt.c[k])}</div>`).join("") + `</div>`).join("") +
     (F.puntos.length < MAX_PUNTOS ? `<button type="button" class="btn sec sm" data-in="punto">＋ Agregar punto</button>` : "") + `</div>`;
   const secC = `<div class="in-card"><h3>C. Criterios</h3>` + BLOQUES.map(([nom, ns], bi) =>
     `<p class="s" style="margin-top:10px"><b>${esc(nom)}</b></p>` + ns.map(n => {
