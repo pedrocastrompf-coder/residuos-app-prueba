@@ -70,8 +70,8 @@ function carga(){
     try{
       const j = await postJ({action:"hallazgos_listar"});
       if(j && j.ok){ S.lista = j.hallazgos; S.t = Date.now(); S.err = ""; }
-      else if(!(j && (j.error === "sesion" || j.error === "cambiar_clave"))) S.err = "No se pudo cargar la lista (" + ((j && j.error) || "error") + ").";
-    }catch(e){ S.err = "Sin conexión. Se muestra lo último cargado."; }
+      else if(!(j && (j.error === "sesion" || j.error === "cambiar_clave"))) S.err = "No se pudo cargar la lista. Revise su señal e intente de nuevo.";
+    }catch(e){ S.err = "Sin señal. Se muestra la última lista cargada."; }
     finally{ S.cargando = null; repinta(); }
   })();
   return S.cargando;
@@ -172,7 +172,7 @@ async function enviar(){
   if(!F.tipo) return void(e.textContent = "Elija el tipo de hallazgo.");
   if(F.desc.trim().length < 5) return void(e.textContent = "Describa la observación (mínimo 5 letras).");
   if(!F.fotos.length) return void(e.textContent = "Agregue al menos una foto con la observación marcada.");
-  if(!navigator.onLine) return void(e.textContent = "Sin conexión. Su reporte se conserva: toque Enviar cuando tenga señal.");
+  if(!navigator.onLine) return void(e.textContent = "Sin señal. Su reporte no se pierde: toque Enviar cuando tenga señal.");
   S.enviando = true; pintaNuevo();
   try{
     const j = await postJ({action:"hallazgo_crear", id:F.id, area:F.area, tipo:F.tipo, riesgo:F.riesgo, descripcion:F.desc, fotos:F.fotos}, 120000);
@@ -181,7 +181,7 @@ async function enviar(){
     pintaNuevo();
     const e2 = document.getElementById("hz-err");
     if(j && (j.error === "sesion" || j.error === "cambiar_clave")) e2.textContent = "Su sesión venció. Ingrese de nuevo: su reporte se conserva.";
-    else e2.textContent = ERR[j && j.error] || "No se pudo enviar (" + ((j && j.error) || "error") + ").";
+    else e2.textContent = ERR[j && j.error] || "No se pudo enviar. Intente de nuevo.";
   }catch(x){
     S.enviando = false; pintaNuevo();
     document.getElementById("hz-err").textContent = "Se cortó la señal. Su reporte se conserva: vuelva a tocar Enviar (no se duplicará).";
@@ -239,7 +239,7 @@ const ejecutoras = () => (S.areas || []).filter(a => a.activo && a.ejecutora);
 function accionesHall(h){
   if(S.accion && S.accion.id === h.id) return panelAccion(h, S.accion);
   const b = [];
-  if(can("hallazgo_asignar") && h.estado !== "Cerrado") b.push(`<button class="btn ${h.estado==="Abierto"?"":"sec"}" data-hz="asignar">${h.estado==="Abierto" ? "Asignar área y plazo" : "Reasignar o cambiar plazo"}</button>`);
+  if(can("hallazgo_asignar") && h.estado !== "Cerrado") b.push(`<button class="btn sec" data-hz="asignar">${h.estado==="Abierto" ? "Asignar área y plazo" : "Reasignar o cambiar plazo"}</button>`);
   if(h.puedeCerrar && h.estado === "Asignado") b.push(`<button class="btn" data-hz="cerrar">Cerrar con evidencia</button>`);
   if(can("hallazgo_reabrir") && h.estado === "Cerrado") b.push(`<button class="btn sec" data-hz="reabrir">Reabrir</button>`);
   if(b.length) return `<div class="hz-acc">${b.join("")}</div>`;
@@ -247,7 +247,7 @@ function accionesHall(h){
 }
 function iniciaAccion(t){
   const h = (S.lista || []).find(x => x.id === S.id); if(!h) return;
-  S.accion = {t, id:h.id, ej:h.areaEjecutora || "", plazo:h.plazo || "", com:"", mot:"", ev:[], pdf:""};
+  S.accion = {t, id:h.id, ej:h.areaEjecutora || "", plazo:h.plazo || masDias(hoyStr(), 7), com:"", mot:"", ev:[], pdf:""};
   if(S.areas === null) cargaAreas();
   repinta();
 }
@@ -261,7 +261,7 @@ function panelAccion(h, A){
       <select id="hz-ej" class="in"><option value="">Elegir…</option>${E.map(a => `<option ${a.nombre===A.ej?"selected":""}>${esc(a.nombre)}</option>`).join("")}</select>
       <label class="f" for="hz-plazo">Plazo de ejecución</label>
       <input type="date" id="hz-plazo" class="in" min="${hoy}" max="${masDias(hoy, 365)}" value="${esc(A.plazo)}">
-      ${err}${bot("Guardar asignación")}</div>`;
+      ${err}${bot("Guardar")}</div>`;
   }
   if(A.t === "cerrar"){
     const th = A.ev.map((f, i) => A.pdf ? "" : `<div class="hz-thumb"><img src="${f}" alt="Evidencia ${i+1}"><button type="button" data-hz-evq="${i}" aria-label="Quitar">✕</button><button type="button" data-hz-evm="${i}" style="left:2px;right:auto" aria-label="Marcar">✎</button></div>`).join("");
@@ -318,7 +318,7 @@ async function guardarAccion(){
     if(A.mot.trim().length < 5) return void(e.textContent = "Escriba el motivo (mínimo 5 letras).");
     body = {action:"hallazgo_reabrir", id:A.id, motivo:A.mot}; ok = "Hallazgo reabierto.";
   }
-  if(!navigator.onLine) return void(e.textContent = "Sin conexión. Los datos se conservan: reintente cuando tenga señal.");
+  if(!navigator.onLine) return void(e.textContent = "Sin señal. Los datos no se pierden: intente cuando tenga señal.");
   S.enviando = true; repinta();
   try{
     const j = await postJ(body, 120000);
@@ -332,7 +332,7 @@ async function guardarAccion(){
     }
     repinta();
     const e2 = document.getElementById("hz-aerr");
-    if(e2) e2.textContent = (j && (j.error === "sesion" || j.error === "cambiar_clave")) ? "Su sesión venció. Ingrese de nuevo: lo escrito se conserva." : (ERR[j && j.error] || "No se pudo guardar (" + ((j && j.error) || "error") + ").");
+    if(e2) e2.textContent = (j && (j.error === "sesion" || j.error === "cambiar_clave")) ? "Su sesión venció. Ingrese de nuevo: lo escrito se conserva." : (ERR[j && j.error] || "No se pudo guardar. Intente de nuevo.");
   }catch(x){
     S.enviando = false; repinta();
     const e2 = document.getElementById("hz-aerr"); if(e2) e2.textContent = "Se cortó la señal. Vuelva a tocar el botón (no se duplicará).";
@@ -347,8 +347,8 @@ async function drawAreas(){
   try{
     const j = await postJ({action:"areas_listar"});
     if(j && j.ok){ S.areasAdm = j.areas; S.areas = j.areas; pintaAreas(); }
-    else if(!(j && (j.error === "sesion" || j.error === "cambiar_clave"))) S.areaErr = "No se pudo cargar (" + ((j && j.error) || "error") + ").";
-  }catch(e){ S.areaErr = "Sin conexión con el Google Sheet."; }
+    else if(!(j && (j.error === "sesion" || j.error === "cambiar_clave"))) S.areaErr = "No se pudo cargar. Revise su señal e intente de nuevo.";
+  }catch(e){ S.areaErr = "Sin señal. Intente de nuevo."; }
 }
 function pintaAreas(){
   const b = document.getElementById("are-body"); if(!b) return;
@@ -373,9 +373,9 @@ async function guardaArea(a, msg){
   try{
     const j = await postJ({action:"area_guardar", nombre:a.nombre, tipo:a.tipo, ejecutora:!!a.ejecutora, activo:a.activo !== false});
     if(j && j.ok){ if(msg) toast(msg); S.areas = null; await drawAreas(); return true; }
-    const m = ERR[j && j.error] || ERR[(j && j.error) + ""] || "No se pudo guardar (" + ((j && j.error) || "error") + ").";
+    const m = ERR[j && j.error] || ERR[(j && j.error) + ""] || "No se pudo guardar. Intente de nuevo.";
     if(a._nuevo){ S.areaErr = j && j.error === "tipo_invalido" ? ERR.tipo_area_invalido : m; pintaAreas(); } else { toast(m); await drawAreas(); }
-  }catch(e){ toast("Sin conexión con el Google Sheet."); }
+  }catch(e){ toast("Sin señal. Intente de nuevo."); }
   return false;
 }
 
