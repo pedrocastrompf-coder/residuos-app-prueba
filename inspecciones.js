@@ -45,13 +45,9 @@ st.textContent = `
 .in-g{display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px;margin-top:2px}
 .in-ro{border:1px solid var(--line);background:#faf7f3;border-radius:10px;padding:11px 12px;font-size:15px;color:var(--brown)}
 @media(max-width:560px){.in-g{grid-template-columns:1fr 1fr}.in-g-w{grid-column:1/-1}}
-.in-steps{display:flex;gap:6px;margin:8px 0}
-.in-steps button{flex:1;border:1.5px solid var(--taupe);background:#fff;color:var(--brown);border-radius:10px;padding:6px 2px;font-size:11px;display:flex;flex-direction:column;align-items:center;line-height:1.25;min-width:0}
-.in-steps button b{font-size:15px}
-.in-steps button span{display:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
-.in-steps button.on{background:var(--brown);color:#fff;border-color:var(--brown)}
-.in-steps button.ok{border-color:var(--ok);color:var(--ok)}
-@media(min-width:700px){.in-steps button span{display:block}}
+.in-prog{margin:10px 2px 4px;font-size:13px;color:var(--gray);font-weight:600}
+.in-bar{height:5px;background:var(--line);border-radius:3px;margin-top:5px;overflow:hidden}
+.in-bar i{display:block;height:100%;background:var(--brown);border-radius:3px}
 .in-nav{display:flex;gap:8px;margin:10px 0;justify-content:space-between}
 .in-nav .btn,.in-nav span{flex:1}
 .in-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}
@@ -202,7 +198,7 @@ function pintaForm(){
       <canvas class="in-fp" data-in-fc="resp"></canvas><div class="in-fb"><span>El responsable firma aquí</span><button type="button" class="btn sec sm" data-in-fl="resp">Borrar firma</button></div></div>
   </div>`;
   const PASOS = ["A. Datos", "B. Segregación", "C. Criterios", "D. Resultado", "E. Firmas"], paso = Math.min(Math.max(S.paso || 0, 0), 4);
-  const barra = `<div class="in-steps">${PASOS.map((t, i) => `<button type="button" data-in-paso="${i}" class="${i === paso ? "on" : i < paso ? "ok" : ""}"><b>${t[0]}</b><span>${t.slice(3)}</span></button>`).join("")}</div>`;
+  const barra = `<div class="in-prog"><span>Paso ${paso + 1} de 5 · ${esc(PASOS[paso])}</span><div class="in-bar"><i style="width:${(paso + 1) * 20}%"></i></div></div>`;
   const nav = `<div class="err" id="in-err">${esc(S.err)}</div><div class="in-nav">${paso > 0 ? `<button class="btn sec" data-in="atras">← Atrás</button>` : `<span></span>`}${paso < 4 ? `<button class="btn" data-in="siguiente">Siguiente →</button>` : `<button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Enviando…" : "Guardar inspección"}</button>`}</div><div class="in-top"><button class="btn sec sm" data-in="salir">Guardar borrador y salir</button></div>`;
   box().innerHTML = barra + [secA, secB, secC, secD, secE][paso] + nav;
   iniciaFirmas();
@@ -392,7 +388,6 @@ document.addEventListener("click", async ev => {
   const cb = t.closest("[data-in-c]");
   if(cb && F){ leeCampos(); const [i, k] = cb.dataset.inC.split("|"); F.puntos[+i].c[k] = cb.dataset.v; guardaBorrador(); pintaForm(); return; }
   const rb = t.closest("[data-in-r]"); if(rb && F){ leeCampos(); const [n, k] = rb.dataset.inR.split("|"); F.crit[+n].r = k; guardaBorrador(); pintaForm(); return; }
-  const pp = t.closest("[data-in-paso]"); if(pp && F){ leeCampos(); S.err = ""; S.paso = +pp.dataset.inPaso; pintaForm(); window.scrollTo(0, 0); return; }
   const pq = t.closest("[data-in-pq]"); if(pq && F){ leeCampos(); F.puntos.splice(+pq.dataset.inPq, 1); guardaBorrador(); pintaForm(); return; }
   const fq = t.closest("[data-in-fq]"); if(fq && F){ leeCampos(); const [n, i] = fq.dataset.inFq.split("|"); F.crit[+n].fotos.splice(+i, 1); pintaForm(); return; }
   const fl = t.closest("[data-in-fl]"); if(fl && F){ if(fl.dataset.inFl === "insp") F.firmaInsp = ""; else F.firmaResp = ""; guardaBorrador(); pintaForm(); return; }
