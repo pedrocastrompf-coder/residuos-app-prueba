@@ -26,7 +26,7 @@ const MAX_PUNTOS = 8, MAX_FOTOS = 3, BORR = "insp_borrador_v2";
 const ERR = {
   area_invalida:"El área elegida no existe o está inactiva.", responsable_invalido:"Escriba el nombre del responsable del área (mínimo 3 letras).",
   cargo_invalido:"El cargo es demasiado largo.", firmas_invalidas:"Faltan las firmas o no son válidas. Vuelva a firmar.", puntos_invalidos:"Revise los puntos de segregación: cada punto necesita nombre y todas sus casillas.",
-  criterios_invalidos:"El servidor tiene una versión anterior del script de inspecciones. Pegue el Inspecciones.gs más reciente y publique una nueva versión; lo escrito se conserva.", nc_invalida:"Una no conformidad no está completa (observación y foto).",
+  planta_bloqueada:"Esta planta apunta a una hoja distinta de la copia de prueba. Revise la pestaña Plantas.", criterios_invalidos:"El servidor tiene una versión anterior del script de inspecciones. Pegue el Inspecciones.gs más reciente y publique una nueva versión; lo escrito se conserva.", nc_invalida:"Una no conformidad no está completa (observación y foto).",
   id_invalido:"La inspección no es válida. Vuelva a empezar.", permiso:"No tiene permiso para esta acción.", clave:"El servidor no reconoce esta acción. Avise al administrador: falta actualizar el script."
 };
 const S = {falta:"", vista:"lista", lista:null, t:0, cargando:false, areas:null, F:null, enviando:false, err:"", sel:null, paso:0};

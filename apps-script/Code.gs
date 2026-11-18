@@ -17,6 +17,11 @@ const SEDE_BASE = "Callao 1";      // planta del Sheet principal (donde vive est
 let SEDE = SEDE_BASE;              // planta de la petición en curso
 let SS_ = null;                    // Sheet de la planta en curso (null = el principal)
 function ss_(){ return SS_ || SpreadsheetApp.getActive(); }
+// ===== SEGURO DE PRUEBA =====
+// Este script es una COPIA de prueba: con SOLO_ESTA_HOJA = true solo puede leer y escribir su propia hoja.
+// Si una planta de la pestaña «Plantas» apunta a otra hoja (por ejemplo la real), la petición se rechaza y nada se escribe.
+// Al pasar a la app REAL hay que poner esta línea en false (o quitar el seguro).
+const SOLO_ESTA_HOJA = true;
 function central_(fn){ const k = SS_; SS_ = null; try{ return fn(); } finally { SS_ = k; } }
 const ANO_DATA = 2026;
 
@@ -357,8 +362,10 @@ function usarPlanta_(sede, u){
   const p = plantaDe_(sede || SEDE_BASE);
   if (!p || !p.activo) return {ok:false, error:"planta"};
   if (u && !puedePlanta_(u, p.planta)) return {ok:false, error:"planta_no_asignada"};
+  const propia = p.sheetId === SpreadsheetApp.getActive().getId();
+  if (SOLO_ESTA_HOJA && !propia) return {ok:false, error:"planta_bloqueada"};
   SEDE = p.planta;
-  SS_ = p.sheetId === SpreadsheetApp.getActive().getId() ? null : SpreadsheetApp.openById(p.sheetId);
+  SS_ = propia ? null : SpreadsheetApp.openById(p.sheetId);
   return {ok:true};
 }
 function plantasListar_(u){
@@ -371,6 +378,7 @@ function plantaCrear_(b, u){
   if (!/^[A-Za-zÁÉÍÓÚÑáéíóúñ0-9 .-]{3,30}$/.test(nombre)) return {ok:false, error:"nombre_invalido"};
   if (plantasTodas_().some(p => norm2_(p.planta) === norm2_(nombre))) return {ok:false, error:"planta_existe"};
   const lug = lugares_(b.lugares); if (!lug.length) return {ok:false, error:"lugares_invalidos"};
+  if (SOLO_ESTA_HOJA) return {ok:false, error:"planta_bloqueada"};
   const base = SpreadsheetApp.getActive();
   const ss = SpreadsheetApp.create("Pesaje RRSS " + nombre);
   ss.setSpreadsheetTimeZone(base.getSpreadsheetTimeZone()); ss.setSpreadsheetLocale(base.getSpreadsheetLocale());
@@ -581,7 +589,7 @@ function catalogoAdmin_(){
 function enCadaPlanta_(fn){
   const kS = SEDE, kSS = SS_, base = SpreadsheetApp.getActive().getId();
   try{
-    plantasTodas_().filter(p => p.activo).forEach(p => {
+    plantasTodas_().filter(p => p.activo && (!SOLO_ESTA_HOJA || p.sheetId === base)).forEach(p => {
       SEDE = p.planta; SS_ = p.sheetId === base ? null : SpreadsheetApp.openById(p.sheetId);
       try{ fn(p); }catch(err){}
     });
@@ -591,7 +599,7 @@ function enCadaPlanta_(fn){
 function fusionarCatalogos_(){
   const P = PropertiesService.getScriptProperties(); if (P.getProperty("cat_fusion_v1")) return;
   const central = catalogoHoja_(), base = SpreadsheetApp.getActive().getId();
-  plantasTodas_().filter(p => p.sheetId !== base).forEach(p => {
+  plantasTodas_().filter(p => p.sheetId !== base && !SOLO_ESTA_HOJA).forEach(p => {
     try{
       const ss = SpreadsheetApp.openById(p.sheetId), sh = ss.getSheetByName(CAT_HOJA); if (!sh) return;
       const n = sh.getLastRow();
@@ -1130,7 +1138,7 @@ function doGet(e){
  */
 function reiniciarDatosDePrueba(){
   const base = SpreadsheetApp.getActive().getId(), out = [];
-  plantasTodas_().forEach(p => {
+  plantasTodas_().filter(p => !SOLO_ESTA_HOJA || p.sheetId === base).forEach(p => {
     const ss = p.sheetId === base ? SpreadsheetApp.getActive() : SpreadsheetApp.openById(p.sheetId);
     ["Hojas","Pesadas","Despachos","Bitácora"].forEach(n => {
       const sh = ss.getSheetByName(n); if (!sh) return;
