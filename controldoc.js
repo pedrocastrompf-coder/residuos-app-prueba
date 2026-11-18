@@ -8,7 +8,7 @@
 const TIPOS_HZ = ["Segregación de residuos","Almacenamiento y acopio","Derrames y fugas","Efluentes y desagües","Orden y limpieza","Uso de agua y energía","Otro"];
 const COLORES = [["","Sin color"],["#1f1f1f","Negro"],["#8b5a2b","Marrón"],["#1f5fbf","Azul"],["#ffffff","Blanco"],["#2e8b3d","Verde"],["#f2c200","Amarillo"],["#d32f2f","Rojo"],["#8a8077","Gris"],["#e07b1f","Naranja"]];
 const ERR = {
-  motivo_invalido:"Escriba el motivo del cambio (mínimo 5 letras).", estado_invalido:"Esta versión ya no es un borrador. Actualice la pantalla.",
+  accion:"El servidor todavía no tiene el módulo de Control documentario. Pegue Code.gs, ControlDoc.gs e Inspecciones.gs en el script y publique una nueva versión.", motivo_invalido:"Escriba el motivo del cambio (mínimo 5 letras).", estado_invalido:"Esta versión ya no es un borrador. Actualice la pantalla.",
   no_existe:"El documento o la versión ya no existe. Actualice la pantalla.", permiso:"No tiene permiso para esta acción.", pdf_invalido:"El PDF no es válido o pesa demasiado.",
   planta_bloqueada:"Esta planta apunta a una hoja distinta de la copia de prueba. Revise la pestaña Plantas.",
   clave:"El servidor no reconoce esta acción. Falta pegar ControlDoc.gs (y Code.gs) y publicar una nueva versión del script."

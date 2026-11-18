@@ -140,6 +140,11 @@ function docMeta_(v){
 // La primera vez: crea el documento del formato de inspección con su versión 06 (vigente) y la 07 (borrador por aprobar)
 function docSembrar_(){
   const sh = docHoja_(); if (sh.getLastRow() >= 2) return;
+  // solo la primera vez: con candado, para que dos pedidos simultáneos (lecturas sin candado) no carguen el documento dos veces
+  const lock = LockService.getScriptLock(); if (!lock.tryLock(20000)) return;
+  try{ if (sh.getLastRow() < 2) docSembrarAhora_(sh); } finally { lock.releaseLock(); }
+}
+function docSembrarAhora_(sh){
   const sis = {usuario:"sistema", nombre:"Carga inicial"}, ahora = hzAhora_();
   const v06 = docValidarDef_(DOC_DEF_06).def, v07 = docValidarDef_(DOC_DEF_07).def;
   const id06 = "v-" + Utilities.getUuid().slice(0, 8), id07 = "v-" + Utilities.getUuid().slice(0, 8);

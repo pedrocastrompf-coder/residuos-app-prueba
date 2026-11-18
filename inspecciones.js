@@ -8,7 +8,7 @@
 const RESP = [["C","Conforme"],["NC","No conforme"],["NA","N/A"]];
 const DOC = "SGA.R.G.002", MAX_FOTOS = 3, BORR = "insp_borrador_v3", FMT_K = "insp_fmt:";
 const ERR = {
-  area_invalida:"El área elegida no existe o está inactiva.", responsable_invalido:"Escriba el nombre del responsable del área (mínimo 3 letras).",
+  accion:"El servidor todavía no tiene el módulo de Control documentario. Pegue Code.gs, ControlDoc.gs e Inspecciones.gs en el script y publique una nueva versión.", area_invalida:"El área elegida no existe o está inactiva.", responsable_invalido:"Escriba el nombre del responsable del área (mínimo 3 letras).",
   cargo_invalido:"El cargo es demasiado largo.", firmas_invalidas:"Faltan las firmas o no son válidas. Vuelva a firmar.", puntos_invalidos:"Revise los puntos: cada punto necesita nombre y todas sus casillas.",
   planta_bloqueada:"Esta planta apunta a una hoja distinta de la copia de prueba. Revise la pestaña Plantas.",
   criterios_invalidos:"Los criterios no coinciden con la versión del formato. Descarte este borrador y empiece una inspección nueva.",
