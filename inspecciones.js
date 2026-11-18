@@ -73,6 +73,7 @@ const fecha = s => s ? String(s).slice(8,10) + "/" + String(s).slice(5,7) + "/" 
 const hoy = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); };
 const hora = () => { const d = new Date(); return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); };
 const CORTES = {sat:90, ace:70};   // PROVISIONAL: igual que el servidor (Inspecciones.gs); confirmar con Medio Ambiente
+const masDias = (d, n) => { const x = new Date(d + "T12:00:00"); x.setDate(x.getDate() + n); return x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0"); };
 const claseCal = c => c === "Satisfactorio" ? "sat" : c === "Aceptable con acciones" ? "ace" : c ? "nos" : "";
 
 /* ---------- cálculo local (solo vista previa; el servidor recalcula) ---------- */
@@ -93,7 +94,7 @@ const calif = p => p === null ? "" : p >= CORTES.sat ? "Satisfactorio" : p >= CO
 /* ---------- estado y borrador ---------- */
 function nuevoPunto(i){ const c = {}; COLS.forEach(([k]) => c[k] = ""); return {nombre:"Punto " + i, c:c, obs:""}; }   // nada viene marcado: el inspector marca punto por punto
 function nuevoForm(){
-  const crit = {}; for(let n = 1; n <= 17; n++) crit[n] = {r:"", obs:"", fotos:[]};
+  const crit = {}; for(let n = 1; n <= 17; n++) crit[n] = {r:"", obs:"", fotos:[], accion:"", resp:"", plazo:""};
   return {id:"insp-" + uuid(), area:"", puntos:[nuevoPunto(1)], crit:crit, bloques:{}, respNombre:"", respCargo:"", inspCargo:(function(){ try{ return localStorage.getItem("insp_cargo:" + (SES && SES.usuario)) || "Medio Ambiente"; }catch(e){ return "Medio Ambiente"; } })(), firmaInsp:"", firmaResp:"", t0:hoy() + " " + hora()};
 }
 function guardaBorrador(){ try{ if(S.F) localStorage.setItem(BORR + ":" + (SES && SES.usuario), JSON.stringify(S.F)); }catch(e){} }   // las fotos pueden pesar: si no cabe, no pasa nada
@@ -145,7 +146,7 @@ function pintaDetalle(){
   box().innerHTML = `<div class="in-top"><button class="btn sec sm" data-in="lista">← Historial</button></div><div class="in-top"><button class="btn" data-in="pdf">Compartir PDF</button><button class="btn sec" data-in="imprimir">Imprimir</button></div>` +
     `<div class="in-res ${claseCal(i.calificacion)}"><div>${esc(i.area)} · ${fecha(i.fecha)} ${esc(i.hora)}</div><b>${esc(i.pct === "" ? "s/d" : i.pct + " %")}</b> ${esc(i.calificacion)}</div>` +
     `<div class="hz-kv"><span>Inspector</span><span>${esc(i.inspectorNombre)}</span><span>Responsable</span><span>${esc(i.respNombre)}${i.respCargo ? " · " + esc(i.respCargo) : ""}</span><span>Hallazgos</span><span>${(i.hallazgos || []).length ? esc(i.hallazgos.join(", ")) : "Ninguno"}</span></div>` +
-    `<div class="in-card"><h3>Criterios</h3>${(i.criterios || []).map(c => `<div class="in-crit"><span class="n">${c.n}.</span> ${esc(CRIT[c.n])} — <b>${esc(c.r)}</b>${c.obs ? `<div class="s">${esc(c.obs)}</div>` : ""}</div>`).join("")}</div>`;
+    `<div class="in-card"><h3>Criterios</h3>${(i.criterios || []).map(c => `<div class="in-crit"><span class="n">${c.n}.</span> ${esc(CRIT[c.n])} — <b>${esc(c.r)}</b>${c.obs ? `<div class="s">${esc(c.obs)}</div>` : ""}${c.accion ? `<div class="s">Acción: ${esc(c.accion)} · Responsable: ${esc(c.responsable || "")} · Plazo: ${esc(fecha(c.plazo))}</div>` : ""}</div>`).join("")}</div>`;
 }
 const sgCell = (i, k, val) => `<span class="in-sg">${RESP.map(([v]) => `<button type="button" data-in-c="${i}|${k}" data-v="${v}" class="${v}${val === v ? " on" : ""}">${v === "NA" ? "N/A" : v}</button>`).join("")}</span>`;
 
@@ -166,7 +167,11 @@ function pintaForm(){
       const c = F.crit[n], r = resultadoCrit(F, n), auto = n === 1;
       return `<div class="in-crit"><div class="t"><span class="n">${n}.</span> ${esc(CRIT[n])}</div>` +
         (auto ? `<span class="hz-b ${r === "C" ? "cer" : r === "NC" ? "venc" : "abi"}">${r === "" ? "Pendiente: se calcula con la sección B" : (r === "NA" ? "N/A" : r) + " (automático)"}</span>` : `<span class="in-sg">${RESP.map(([k]) => `<button type="button" data-in-r="${n}|${k}" class="${k}${c.r === k ? " on" : ""}">${k === "NA" ? "N/A" : k}</button>`).join("")}</span>`) +
-        (r === "NC" ? `<div class="in-nc"><textarea class="in" data-in-o="${n}" maxlength="300" placeholder="¿Qué se observó? (mínimo 5 letras)">${esc(c.obs)}</textarea>
+        (r === "NC" ? `<div class="in-nc"><label class="f">Observación</label><textarea class="in" data-in-o="${n}" maxlength="300" placeholder="¿Qué se observó? (mínimo 5 letras)">${esc(c.obs)}</textarea>
+          <label class="f">Acción correctiva</label><textarea class="in" data-in-a="${n}" maxlength="300" placeholder="¿Qué se hará para corregirlo? (mínimo 5 letras)">${esc(c.accion || "")}</textarea>
+          <label class="f">Responsable de la acción</label><input class="in" data-in-rs="${n}" maxlength="60" autocomplete="off" placeholder="Nombre y apellidos" value="${esc(c.resp || "")}">
+          <label class="f">Plazo</label><input class="in" type="date" data-in-pz="${n}" min="${hoy()}" max="${masDias(hoy(), 365)}" value="${esc(c.plazo || "")}">
+          <label class="f">Fotos con la observación marcada</label>
           <div class="hz-thumbs">${c.fotos.map((f, fi) => `<div class="hz-thumb"><img src="${f}" alt=""><button type="button" data-in-fq="${n}|${fi}">✕</button></div>`).join("")}</div>
           ${c.fotos.length < MAX_FOTOS ? `<label class="btn sec sm" style="display:inline-block">📷 Foto con la marca<input type="file" accept="image/*" capture="environment" data-in-f="${n}" hidden></label>` : ""}</div>` : "") + `</div>`;
     }).join("") ).join("") + `</div>`;
@@ -197,6 +202,9 @@ function leeCampos(){
   if(g("in-ic")) F.inspCargo = g("in-ic").value;
   box().querySelectorAll("[data-in-pn]").forEach(e => { F.puntos[+e.dataset.inPn].nombre = e.value; });
   box().querySelectorAll("[data-in-o]").forEach(e => { F.crit[+e.dataset.inO].obs = e.value; });
+  box().querySelectorAll("[data-in-a]").forEach(e => { F.crit[+e.dataset.inA].accion = e.value; });
+  box().querySelectorAll("[data-in-rs]").forEach(e => { F.crit[+e.dataset.inRs].resp = e.value; });
+  box().querySelectorAll("[data-in-pz]").forEach(e => { F.crit[+e.dataset.inPz].plazo = e.value; });
 }
 function validaLocal(F){
   if(!F.area) return "Elija el área.";
@@ -209,7 +217,10 @@ function validaLocal(F){
   for(let n = 1; n <= 17; n++){
     if(resultadoCrit(F, n) !== "NC") continue;
     const c = F.crit[n];
-    if(c.obs.trim().length < 5) return "Criterio " + n + ": describa lo observado (mínimo 5 letras).";
+    if(c.obs.trim().length < 5){ S.falta = `[data-in-o="${n}"]`; return "Criterio " + n + ": describa lo observado (mínimo 5 letras)."; }
+    if((c.accion || "").trim().length < 5){ S.falta = `[data-in-a="${n}"]`; return "Criterio " + n + ": escriba la acción correctiva (mínimo 5 letras)."; }
+    if((c.resp || "").trim().length < 3){ S.falta = `[data-in-rs="${n}"]`; return "Criterio " + n + ": escriba el responsable de la acción."; }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(c.plazo || "") || c.plazo < hoy() || c.plazo > masDias(hoy(), 365)){ S.falta = `[data-in-pz="${n}"]`; return "Criterio " + n + ": elija un plazo desde hoy y hasta 365 días."; }
     if(!c.fotos.length) return "Criterio " + n + ": agregue una foto con la observación marcada.";
   }
   if(F.respNombre.trim().length < 3) return "Escriba el nombre del responsable del área.";
@@ -228,7 +239,7 @@ async function enviar(){
   }
   if(!navigator.onLine){ S.err = "Sin señal. Su inspección está guardada como borrador: toque Guardar cuando tenga señal."; guardaBorrador(); return pintaForm(); }
   S.enviando = true; pintaForm();
-  const criterios = []; for(let n = 1; n <= 17; n++){ const r = resultadoCrit(F, n), c = F.crit[n]; criterios.push(r === "NC" ? {n:n, r:r, obs:c.obs.trim(), fotos:c.fotos} : {n:n, r:r}); }
+  const criterios = []; for(let n = 1; n <= 17; n++){ const r = resultadoCrit(F, n), c = F.crit[n]; criterios.push(r === "NC" ? {n:n, r:r, obs:c.obs.trim(), accion:c.accion.trim(), responsable:c.resp.trim(), plazo:c.plazo, fotos:c.fotos} : {n:n, r:r}); }
   try{
     const j = await postJ({action:"inspeccion_guardar", id:F.id, area:F.area, respNombre:F.respNombre.trim(), respCargo:F.respCargo.trim(), inspectorCargo:F.inspCargo.trim(), firmaInsp:F.firmaInsp, firmaResp:F.firmaResp,
       puntos:F.puntos.map(p => ({nombre:p.nombre.trim(), c:p.c, obs:p.obs || ""})), criterios:criterios}, 120000);
@@ -281,7 +292,7 @@ function htmlFormato(i, f){
   const filasB = pts.map((p, k) => p ? `<tr><td class="c">${k + 1}</td><td>${esc(p.nombre)}</td>${COLS.map(([c]) => celda(p.c[c])).join("")}<td>${esc(p.obs || "")}</td></tr>` : `<tr><td class="c">${k + 1}</td><td></td>${COLS.map(() => "<td></td>").join("")}<td></td></tr>`).join("");
   const filasC = BLOQUES.map(([nom, ns]) => `<tr><td class="g" colspan="7">${esc(nom.toUpperCase())}</td></tr>` + ns.map(n => {
     const c = crit[n] || {r:"", obs:""};
-    return `<tr><td class="c">${n}</td><td>${esc(CRIT[n])}</td>${celda(c.r)}<td>${esc(c.obs || "")}</td><td>${c.r === "NC" ? "Registrado como hallazgo en la app" : ""}</td><td></td><td></td></tr>`;
+    return `<tr><td class="c">${n}</td><td>${esc(CRIT[n])}</td>${celda(c.r)}<td>${esc(c.obs || "")}</td><td>${esc(c.accion || "")}</td><td>${esc(c.responsable || "")}</td><td class="c">${c.plazo ? esc(fecha(c.plazo)) : ""}</td></tr>`;
   }).join("")).join("");
   const cal = i.pct === "" || i.pct == null ? "—" : esc(i.pct) + " %";
   return CSS_PDF + `<div class="fi">

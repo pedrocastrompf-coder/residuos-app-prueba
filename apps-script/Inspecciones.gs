@@ -79,11 +79,17 @@ function inspValidar_(b){
     if (!x || INSP_RES.indexOf(x.r) < 0) return {ok:false, error:"criterios_invalidos"};
     const obs = inspTxt_(x.obs);
     if (x.r !== "NC"){ crit.push({n:n, r:x.r, obs:obs.slice(0, 300)}); continue; }
-    const desc = ("Criterio " + n + ": " + INSP_CRIT[n][0] + (obs ? " — " + obs : "")).slice(0, 500);
+    // toda no conformidad exige acción correctiva, responsable y plazo (la inspección no se termina ni se imprime sin ellos)
+    const accion = inspTxt_(x.accion), resp = inspTxt_(x.responsable), plazo = String(x.plazo || "");
+    if (obs.length < 5) return {ok:false, error:"nc_invalida", criterio:n, detalle:"descripcion_invalida"};
+    if (accion.length < 5 || accion.length > 300) return {ok:false, error:"nc_invalida", criterio:n, detalle:"accion_invalida"};
+    if (resp.length < 3 || resp.length > 60) return {ok:false, error:"nc_invalida", criterio:n, detalle:"responsable_invalido"};
+    const dp = hzDia_(plazo), dh = hzDia_(hzHoy_());
+    if (isNaN(dp) || dp < dh || dp - dh > 365) return {ok:false, error:"nc_invalida", criterio:n, detalle:"plazo_invalido"};
+    const desc = ("Criterio " + n + ": " + INSP_CRIT[n][0] + " — " + obs.slice(0, 200) + " | Acción: " + accion.slice(0, 120) + " | Resp.: " + resp + " | Plazo: " + plazo.split("-").reverse().join("/")).slice(0, 500);
     const rep = hzValidarReporte_({id:String(b.id) + "-c" + n, area:area, descripcion:desc, tipo:INSP_CRIT[n][1], riesgo:"Medio", fotos:x.fotos});
     if (!rep.ok) return {ok:false, error:"nc_invalida", criterio:n, detalle:rep.error};
-    if (obs.length < 5) return {ok:false, error:"nc_invalida", criterio:n, detalle:"descripcion_invalida"};
-    crit.push({n:n, r:"NC", obs:obs.slice(0, 300)});
+    crit.push({n:n, r:"NC", obs:obs.slice(0, 300), accion:accion, responsable:resp, plazo:plazo});
     hallazgos.push(rep.v);
   }
   return {ok:true, v:{id:String(b.id), area:area, respNombre:respNombre, respCargo:respCargo, inspCargo:inspCargo, firmaInsp:b.firmaInsp, firmaResp:b.firmaResp, puntos:puntos, crit:crit, hallazgos:hallazgos}};
@@ -146,7 +152,7 @@ function pruebaInspecciones(){
   const px = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
   const FIRMA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
   const ar = hzAreasTodas_().filter(a => a.activo)[0]; if (!ar){ Logger.log("Cree primero un área en la pestaña Áreas."); return; }
-  const crit = []; for (let n = 1; n <= 17; n++) crit.push(n === 3 ? {n:n, r:"NC", obs:"Contenedor rebosado de prueba", fotos:[px]} : {n:n, r:"C"});
+  const crit = []; for (let n = 1; n <= 17; n++) crit.push(n === 3 ? {n:n, r:"NC", obs:"Contenedor rebosado de prueba", accion:"Retirar y limpiar el punto", responsable:"Responsable de prueba", plazo:hzHoy_(), fotos:[px]} : {n:n, r:"C"});
   const punto = {nombre:"Punto 1", c:{noaprov:"C", organico:"C", papel:"NA", plastico:"C", vidrio:"NA", metal:"NA", peligroso:"NA", mermas:"NA", rotulacion:"C", delimitacion:"C"}, obs:""};
   const id = "prueba-insp-" + Utilities.formatDate(new Date(), "America/Lima", "yyyyMMddHHmmss");
   Logger.log("Guardar: %s", JSON.stringify(inspGuardar_({id:id, area:ar.nombre, respNombre:"Responsable de prueba", respCargo:"Jefe", firmaInsp:FIRMA, firmaResp:FIRMA, puntos:[punto], criterios:crit}, u)));
