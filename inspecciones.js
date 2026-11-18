@@ -123,7 +123,7 @@ async function cargaAreas(){
 function drawInsp(){
   if(!box()) return; repinta();
   if(S.vista === "lista" && !S.cargando && (S.lista === null || Date.now() - S.t > 15000)) carga();
-  if(S.areas === null) cargaAreas();
+  cargaAreas();
 }
 function repinta(){
   if(!box() || TAB !== "insp") return;
@@ -378,8 +378,8 @@ document.addEventListener("click", async ev => {
   const fl = t.closest("[data-in-fl]"); if(fl && F){ if(fl.dataset.inFl === "insp") F.firmaInsp = ""; else F.firmaResp = ""; guardaBorrador(); pintaForm(); return; }
   const k = t.closest("[data-in]"); if(!k) return; const a = k.dataset.in;
   if(a === "pdf" || a === "imprimir"){ const i = (S.lista || []).find(x => x.id === S.sel); if(i) (a === "pdf" ? compartirInsp : imprimirInsp)(i, k); return; }
-  if(a === "nueva"){ S.F = nuevoForm(); S.vista = "form"; S.err = ""; guardaBorrador(); pintaForm(); if(S.areas === null) cargaAreas(); }
-  else if(a === "seguir"){ S.F = leeBorrador(); S.vista = "form"; S.err = ""; pintaForm(); if(S.areas === null) cargaAreas(); }
+  if(a === "nueva"){ S.F = nuevoForm(); S.vista = "form"; S.err = ""; guardaBorrador(); pintaForm(); cargaAreas(); }
+  else if(a === "seguir"){ S.F = leeBorrador(); S.vista = "form"; S.err = ""; pintaForm(); cargaAreas(); }
   else if(a === "descartar"){ if(confirm("¿Descartar la inspección sin terminar?")){ borraBorrador(); pintaLista(); } }
   else if(a === "lista"){ S.vista = "lista"; repinta(); }
   else if(a === "punto" && F){ leeCampos(); F.puntos.push(nuevoPunto(F.puntos.length + 1)); guardaBorrador(); pintaForm(); }
