@@ -161,17 +161,18 @@ function pruebaInspecciones(){
 
 // ===================== 3. CARGA INICIAL DE ÁREAS =====================
 // Ejecútala UNA vez desde el editor (elige «cargarAreasIniciales» y pulsa Ejecutar). No duplica ni modifica las áreas que ya existan.
-// Tipo: Producción = líneas; Servicio = almacenes y apoyo; Común = coworking. «ejecutora» = puede recibir acciones correctivas (cámbialo en la pestaña Áreas si hace falta).
+// Lista del Programa anual de inspecciones ambientales 2026 (SGA.PR.G.008). Tipo: Producción = líneas; Servicio = almacenes y apoyo; Común = comedor, oficinas y exteriores. «ejecutora» = puede recibir acciones correctivas (cámbialo en la pestaña Áreas si hace falta).
 const AREAS_INICIALES = [
   ["Cobertura L1, L3","Producción"],["Cobertura L2, L4","Producción"],["Empaque 1","Producción"],["Moldeo convencional","Producción"],
-  ["Moldeo 11, 12","Producción"],["Moldeo 13, 16","Producción"],["Bombonería","Producción"],["Gotas","Producción"],["Grageas","Producción"],
-  ["Empaque 2 - Cocoa","Producción"],["Mezclas instantáneas","Producción"],["Ecco","Producción"],["Miniconos","Producción"],["Bañados","Producción"],
-  ["Wafer","Producción"],["Galletas","Producción"],["Molino","Producción"],["Conos","Producción"],["Stick","Producción"],["Barras cereales","Producción"],
-  ["Proyectos","Servicio",true],["Mantenimiento","Servicio",true],["Saneamiento","Servicio",true],["Calidad","Servicio"],
-  ["Almacén P. terminado","Servicio"],["Almacén Repuestos","Servicio"],["Almacén Embalaje","Servicio"],["Almacén Mat. prima","Servicio"],
-  ["Almacén Dosimetría","Servicio"],["Almacén Planta 2","Servicio"],["Almacén Meczar","Servicio"],
-  ["Transporte","Servicio"],["Desarrollo","Servicio"],["Acarreo","Servicio"],["Adm. Producción","Servicio"],
-  ["Coworking 1","Común"],["Coworking 2","Común"]
+  ["Moldeo 11, 12","Producción"],["Moldeo 13, 16","Producción"],["Bombonería","Producción"],["Gotas","Producción"],["Grageados","Producción"],
+  ["Empaque 2 - Cocoa","Producción"],["Mezclas instantáneas","Producción"],["Miniconos","Producción"],["Bañados","Producción"],
+  ["Wafer","Producción"],["Galletas","Producción"],["Molino","Producción"],["Conos","Producción"],["Stick","Producción"],
+  ["Barras cereales","Producción"],["Ecco","Producción"],["Molino de azúcar","Producción"],
+  ["Saneamiento","Servicio",true],["Calidad","Servicio"],["Aplicaciones y desarrollo","Servicio"],
+  ["Almacén - Productos terminados","Servicio"],["Almacén - Repuestos","Servicio"],["Almacén - Embalaje","Servicio"],
+  ["Almacén - Materia prima","Servicio"],["Almacén - Dosimetría","Servicio"],["Sensorial","Servicio"],
+  ["Mantenimiento","Servicio",true],["Transporte","Servicio"],["Proyectos","Servicio",true],["Tópico","Servicio"],
+  ["Comedor","Común"],["Oficinas administrativas","Común"],["Azotea de planta","Común"],["Zona Miami y exteriores","Común"]
 ];
 function cargarAreasIniciales(){
   const u = {usuario:"carga-inicial", nombre:"Carga inicial", rol:"Administrador", areas:[]};
