@@ -199,7 +199,7 @@ function pintaForm(){
   </div>`;
   const PASOS = ["A. Datos", "B. Segregación", "C. Criterios", "D. Resultado", "E. Firmas"], paso = Math.min(Math.max(S.paso || 0, 0), 4);
   const barra = `<div class="in-prog"><span>Paso ${paso + 1} de 5 · ${esc(PASOS[paso])}</span><div class="in-bar"><i style="width:${(paso + 1) * 20}%"></i></div></div>`;
-  const nav = `<div class="err" id="in-err">${esc(S.err)}</div><div class="in-nav">${paso > 0 ? `<button class="btn sec" data-in="atras">← Atrás</button>` : `<span></span>`}${paso < 4 ? `<button class="btn" data-in="siguiente">Siguiente →</button>` : `<button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Enviando…" : "Guardar inspección"}</button>`}</div><div class="in-top"><button class="btn sec sm" data-in="salir">Guardar borrador y salir</button></div>`;
+  const nav = `<div class="err" id="in-err">${esc(S.err)}</div><div class="in-nav">${paso > 0 ? `<button class="btn sec" data-in="atras">← Atrás</button>` : `<span></span>`}${paso < 4 ? `<button class="btn" data-in="siguiente">Siguiente →</button>` : `<button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Enviando…" : "Guardar inspección"}</button>`}</div><div class="in-top"><button class="btn sec" style="flex:1" data-in="salir">Guardar borrador y salir</button></div>`;
   box().innerHTML = barra + [secA, secB, secC, secD, secE][paso] + nav;
   iniciaFirmas();
 }
@@ -409,7 +409,7 @@ document.addEventListener("click", async ev => {
 });
 document.addEventListener("change", async ev => {
   const t = ev.target, F = S.F; if(!F || TAB !== "insp") return;
-  if(t.id === "in-area"){ F.area = t.value; guardaBorrador(); return; }
+  if(t.id === "in-area"){ F.area = t.value; S.err = ""; const e = document.getElementById("in-err"); if(e) e.textContent = ""; guardaBorrador(); return; }
   if(t.dataset.inF !== undefined){
     const n = +t.dataset.inF, file = t.files && t.files[0]; if(!file || F.crit[n].fotos.length >= MAX_FOTOS) return;
     leeCampos();
