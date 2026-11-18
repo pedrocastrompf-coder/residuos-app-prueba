@@ -6,7 +6,9 @@
  */
 
 // ===================== 1. REGLAS =====================
-const INSP_COLS = ["id","sede","creado","fecha","hora","area","inspectorUsuario","inspectorNombre","respNombre","respCargo","puntos","criterios","pctConf","calificacion","hallazgos"];
+const INSP_COLS = ["id","sede","creado","fecha","hora","area","inspectorUsuario","inspectorNombre","respNombre","respCargo","puntos","criterios","pctConf","calificacion","hallazgos","inspectorCargo","firmaInsp","firmaResp"];
+const INSP_LIV = 16;   // columnas que lee el historial (las firmas, que pesan, quedan fuera)
+const INSP_MAX_FIRMA = 30000;   // caracteres máximos de una firma (celda de Sheets: 50 000)
 const INSP_CORTES = {satisfactorio:90, aceptable:70};   // PROVISIONAL: porcentajes de corte por confirmar con Medio Ambiente
 const INSP_TIPOS_CELDA = ["noaprov","organico","papel","plastico","vidrio","metal","peligroso","mermas","rotulacion","delimitacion"];
 const INSP_RES = ["C","NC","NA"];
@@ -52,6 +54,9 @@ function inspValidar_(b){
   const respNombre = inspTxt_(b.respNombre), respCargo = inspTxt_(b.respCargo);
   if (respNombre.length < 3 || respNombre.length > 60) return {ok:false, error:"responsable_invalido"};
   if (respCargo.length > 40) return {ok:false, error:"cargo_invalido"};
+  const inspCargo = inspTxt_(b.inspectorCargo); if (inspCargo.length > 40) return {ok:false, error:"cargo_invalido"};
+  const okFirma = f => typeof f === "string" && /^data:image\/png;base64,[A-Za-z0-9+\/=]+$/.test(f) && f.length <= INSP_MAX_FIRMA;
+  if (!okFirma(b.firmaInsp) || !okFirma(b.firmaResp)) return {ok:false, error:"firmas_invalidas"};
   const P = Array.isArray(b.puntos) ? b.puntos : [];
   if (P.length > INSP_MAX_PUNTOS) return {ok:false, error:"puntos_invalidos"};
   const puntos = [];
@@ -81,7 +86,7 @@ function inspValidar_(b){
     crit.push({n:n, r:"NC", obs:obs.slice(0, 300)});
     hallazgos.push(rep.v);
   }
-  return {ok:true, v:{id:String(b.id), area:area, respNombre:respNombre, respCargo:respCargo, puntos:puntos, crit:crit, hallazgos:hallazgos}};
+  return {ok:true, v:{id:String(b.id), area:area, respNombre:respNombre, respCargo:respCargo, inspCargo:inspCargo, firmaInsp:b.firmaInsp, firmaResp:b.firmaResp, puntos:puntos, crit:crit, hallazgos:hallazgos}};
 }
 
 // ===================== 2. PERSISTENCIA =====================
@@ -106,7 +111,7 @@ function inspGuardar_(b, u){
   });
   const pct = inspPorcentaje_(v.crit), cal = inspCalificacion_(pct);
   sh.appendRow([v.id, SEDE, ahora, ahora.slice(0,10), ahora.slice(11,16), v.area, u.usuario, u.nombre, v.respNombre, v.respCargo,
-    JSON.stringify(v.puntos), JSON.stringify(v.crit), pct, cal, JSON.stringify(ids)]);
+    JSON.stringify(v.puntos), JSON.stringify(v.crit), pct, cal, JSON.stringify(ids), v.inspCargo, v.firmaInsp, v.firmaResp]);
   bitacora_(u, "Inspección registrada", v.id + " · " + v.area + " · " + (pct === "" ? "s/d" : pct + "%") + " · " + ids.length + " hallazgo(s)");
   return {ok:true, id:v.id, pct:pct, calificacion:cal, hallazgos:ids};
 }
@@ -114,26 +119,38 @@ function inspGuardar_(b, u){
 function inspListar_(u){
   u = hzU_(u);
   const todas = u.rol === "Inspector" || u.rol === "Administrador";
-  const F = sh => { const n = sh.getLastRow(); return n < 2 ? [] : sh.getRange(2, 1, n - 1, INSP_COLS.length).getValues(); };
+  const F = sh => { const n = sh.getLastRow(); return n < 2 ? [] : sh.getRange(2, 1, n - 1, INSP_LIV).getValues(); };
   const L = F(inspHoja_()).filter(r => String(r[1]) === SEDE && (todas || String(r[6]) === u.usuario)).map(r => {
-    const o = {}; INSP_COLS.forEach((c, j) => o[c] = String(r[j] == null ? "" : r[j])); return o;
+    const o = {}; INSP_COLS.slice(0, INSP_LIV).forEach((c, j) => o[c] = String(r[j] == null ? "" : r[j])); return o;
   }).reverse().slice(0, 100);
   const out = L.map(o => ({id:o.id, creado:o.creado, fecha:o.fecha, hora:o.hora, area:o.area, inspectorNombre:o.inspectorNombre,
-    respNombre:o.respNombre, respCargo:o.respCargo, puntos:JSON.parse(o.puntos || "[]"), criterios:JSON.parse(o.criterios || "[]"),
+    respNombre:o.respNombre, respCargo:o.respCargo, inspectorCargo:o.inspectorCargo, puntos:JSON.parse(o.puntos || "[]"), criterios:JSON.parse(o.criterios || "[]"),
     pct:o.pctConf, calificacion:o.calificacion, hallazgos:JSON.parse(o.hallazgos || "[]")}));
   return {ok:true, inspecciones:out};
+}
+
+// Las firmas se piden solo al imprimir o compartir el PDF (el PDF no se guarda: la app lo arma al momento)
+function inspFirmas_(b, u){
+  u = hzU_(u);
+  const sh = inspHoja_(), n = sh.getLastRow(); if (n < 2) return {ok:false, error:"no_existe"};
+  const V = sh.getRange(2, 1, n - 1, INSP_COLS.length).getValues();
+  const r = V.filter(x => String(x[0]) === String(b.id) && String(x[1]) === SEDE)[0];
+  if (!r) return {ok:false, error:"no_existe"};
+  if (!(u.rol === "Inspector" || u.rol === "Administrador" || String(r[6]) === u.usuario)) return {ok:false, error:"permiso"};
+  return {ok:true, firmaInsp:String(r[INSP_COLS.indexOf("firmaInsp")] || ""), firmaResp:String(r[INSP_COLS.indexOf("firmaResp")] || "")};
 }
 
 // Prueba para el editor: guarda una inspección con 1 NC y una imagen JPEG de 1×1 píxel
 function pruebaInspecciones(){
   const u = {usuario:"prueba", nombre:"Prueba", rol:"Administrador"};
   const px = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
+  const FIRMA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
   const ar = hzAreasTodas_().filter(a => a.activo)[0]; if (!ar){ Logger.log("Cree primero un área en la pestaña Áreas."); return; }
   const crit = []; for (let n = 1; n <= 17; n++) crit.push(n === 3 ? {n:n, r:"NC", obs:"Contenedor rebosado de prueba", fotos:[px]} : {n:n, r:"C"});
   const punto = {nombre:"Punto 1", c:{noaprov:"C", organico:"C", papel:"NA", plastico:"C", vidrio:"NA", metal:"NA", peligroso:"NA", mermas:"NA", rotulacion:"C", delimitacion:"C"}, obs:""};
   const id = "prueba-insp-" + Utilities.formatDate(new Date(), "America/Lima", "yyyyMMddHHmmss");
-  Logger.log("Guardar: %s", JSON.stringify(inspGuardar_({id:id, area:ar.nombre, respNombre:"Responsable de prueba", respCargo:"Jefe", puntos:[punto], criterios:crit}, u)));
-  Logger.log("Repetir: %s", JSON.stringify(inspGuardar_({id:id, area:ar.nombre, respNombre:"Responsable de prueba", respCargo:"Jefe", puntos:[punto], criterios:crit}, u)));
+  Logger.log("Guardar: %s", JSON.stringify(inspGuardar_({id:id, area:ar.nombre, respNombre:"Responsable de prueba", respCargo:"Jefe", firmaInsp:FIRMA, firmaResp:FIRMA, puntos:[punto], criterios:crit}, u)));
+  Logger.log("Repetir: %s", JSON.stringify(inspGuardar_({id:id, area:ar.nombre, respNombre:"Responsable de prueba", respCargo:"Jefe", firmaInsp:FIRMA, firmaResp:FIRMA, puntos:[punto], criterios:crit}, u)));
 }
 
 if (typeof module !== "undefined") module.exports = {inspPorcentaje_, inspCalificacion_, INSP_CORTES};
