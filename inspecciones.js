@@ -1,5 +1,5 @@
 /* Inspecciones de medio ambiente (SGA.R.G.002 Vs 06) · formulario ágil: todo conforme por defecto, puntos de segregación,
-   17 criterios en 5 bloques, no conformidades que pasan a Hallazgos, borrador sin señal.
+   9 criterios en 3 bloques, no conformidades que pasan a Hallazgos, borrador sin señal.
    Se carga después de hallazgos-img.js y usa: $, esc, uuid, toast, postJ, can, SES, CFG, TAB, showView. El servidor valida y calcula. */
 (function(){
 "use strict";
@@ -7,28 +7,20 @@
 const COLS = [["noaprov","No aprovechable"],["organico","Orgánico"],["papel","Papel y cartón"],["plastico","Plástico"],["vidrio","Vidrio"],["metal","Metal"],["peligroso","Peligrosos"],["mermas","Mermas"],["rotulacion","Rotulación"],["delimitacion","Delimitación"]];
 const RESP = [["C","Conforme"],["NC","No conforme"],["NA","N/A"]];
 const BLOQUES = [
-  ["Residuos sólidos y acopio",[1,2,3,4,5,6]], ["Peligrosos y químicos",[7,8,9]], ["Efluentes y emisiones",[10,11,12]],
-  ["Energía, agua e inocuidad",[13,14,15]], ["Toma de conciencia",[16,17]]
+  ["Residuos sólidos y acopio",[1,2,3,4,5]], ["Peligrosos y químicos",[6,7]], ["Emisiones, agua y energía",[8,9]]
 ];
-const FORMATO = Object.assign({codigo:"SGA.R.G.002", version:"06", aprobacion:""}, CFG.FORMATO_INSPECCION || {});
+const FORMATO = Object.assign({codigo:"SGA.R.G.002", version:"07 (borrador)", aprobacion:""}, CFG.FORMATO_INSPECCION || {});
+const N_CRIT = 9;
 const CRIT = {
-  1:"Segregación, rotulación y delimitación conformes en todos los puntos (se calcula de la Sección A)",
-  2:"Contenedores en buen estado, con bolsa y letrero de colores NTP 900.058",
-  3:"Sin sobrellenado ni residuos fuera del contenedor; punto limpio y ordenado",
-  4:"Envolturas laminadas / metalizadas segregadas según instructivo",
-  5:"Mermas y subproductos separados, identificados y con destino registrado",
-  6:"Acopio temporal en condiciones (techo, piso, señalización, contención)",
-  7:"Residuos peligrosos y RAEE en recipiente cerrado y rotulado",
-  8:"Químicos almacenados según FDS, con bandeja antiderrame y rótulo",
-  9:"Kit antiderrames completo y accesible",
-  10:"Trampas de grasa operativas",
-  11:"Efluentes de lavado CIP neutralizados antes de descargar",
-  12:"Sin humo, olores, polvo ni fugas de refrigerante anormales",
-  13:"Sin fugas de agua, vapor, aire o gas; equipos apagados si no se usan",
-  14:"Flujómetros operativos",
-  15:"Residuos en zona de proceso sin riesgo de plagas ni contaminación cruzada",
-  16:"Personal conoce aspectos ambientales, colores y respuesta a derrames",
-  17:"Otro"
+  1:"Segregación, rotulación y delimitación conformes en todos los puntos (se calcula de la Sección B)",
+  2:"Contenedores en buen estado y con bolsa",
+  3:"Sin sobrellenado ni residuos fuera del contenedor; zona limpia, sin riesgo de plagas ni contaminación cruzada",
+  4:"Mermas, subproductos y envolturas laminadas segregados, con destino registrado",
+  5:"Acopio temporal en condiciones (techo, piso, señalización, contención)",
+  6:"Residuos peligrosos y RAEE en recipiente cerrado y rotulado",
+  7:"Químicos con FDS y bandeja antiderrame; kit antiderrames completo y accesible",
+  8:"Sin humo, olores, polvo ni fugas de refrigerante anormales",
+  9:"Sin fugas de agua, vapor, aire o gas; equipos apagados si no se usan; flujómetros operativos"
 };
 const MAX_PUNTOS = 8, MAX_FOTOS = 3, BORR = "insp_borrador_v1";
 const ERR = {
@@ -97,7 +89,7 @@ function crit1(F){
 function resultadoCrit(F, n){ return n === 1 ? crit1(F) : F.crit[n].r; }
 function porcentaje(F){
   let c = 0, nc = 0;
-  for(let n = 1; n <= 17; n++){ const r = resultadoCrit(F, n); if(r === "C") c++; else if(r === "NC") nc++; }
+  for(let n = 1; n <= N_CRIT; n++){ const r = resultadoCrit(F, n); if(r === "C") c++; else if(r === "NC") nc++; }
   return (c + nc) ? Math.round(1000 * c / (c + nc)) / 10 : null;
 }
 const calif = p => p === null ? "" : p >= CORTES.sat ? "Satisfactorio" : p >= CORTES.ace ? "Aceptable con acciones" : "No satisfactorio";
@@ -105,7 +97,7 @@ const calif = p => p === null ? "" : p >= CORTES.sat ? "Satisfactorio" : p >= CO
 /* ---------- estado y borrador ---------- */
 function nuevoPunto(i){ const c = {}; COLS.forEach(([k]) => c[k] = ""); return {nombre:"Punto " + i, c:c, obs:""}; }   // nada viene marcado: el inspector marca punto por punto
 function nuevoForm(){
-  const crit = {}; for(let n = 1; n <= 17; n++) crit[n] = {r:"", obs:"", fotos:[], accion:"", resp:"", plazo:""};
+  const crit = {}; for(let n = 1; n <= N_CRIT; n++) crit[n] = {r:"", obs:"", fotos:[], accion:"", resp:"", plazo:""};
   return {id:"insp-" + uuid(), area:"", puntos:[nuevoPunto(1)], crit:crit, bloques:{}, respNombre:"", respCargo:"", inspCargo:(function(){ try{ return localStorage.getItem("insp_cargo:" + (SES && SES.usuario)) || "Medio Ambiente"; }catch(e){ return "Medio Ambiente"; } })(), firmaInsp:"", firmaResp:"", t0:hoy() + " " + hora()};
 }
 function guardaBorrador(){ try{ if(S.F) localStorage.setItem(BORR + ":" + (SES && SES.usuario), JSON.stringify(S.F)); }catch(e){} }   // las fotos pueden pesar: si no cabe, no pasa nada
@@ -234,8 +226,8 @@ function validaLocal(F){
     const f = COLS.filter(([k]) => !F.puntos[i].c[k])[0];
     if(f){ S.falta = `[data-in-c="${i}|${f[0]}"]`; return "Punto de segregación «" + F.puntos[i].nombre + "»: falta marcar " + f[1] + ". Marque C, NC o N/A en cada casilla."; }
   }
-  for(let n = 2; n <= 17; n++) if(!F.crit[n].r){ S.falta = `[data-in-r^="${n}|"]`; return "Criterio " + n + ": falta marcar C, NC o N/A."; }
-  for(let n = 1; n <= 17; n++){
+  for(let n = 2; n <= N_CRIT; n++) if(!F.crit[n].r){ S.falta = `[data-in-r^="${n}|"]`; return "Criterio " + n + ": falta marcar C, NC o N/A."; }
+  for(let n = 1; n <= N_CRIT; n++){
     if(resultadoCrit(F, n) !== "NC") continue;
     const c = F.crit[n];
     if(c.obs.trim().length < 5){ S.falta = `[data-in-o="${n}"]`; return "Criterio " + n + ": describa lo observado (mínimo 5 letras)."; }
@@ -259,7 +251,7 @@ async function enviar(){
   }
   if(!navigator.onLine){ S.err = "Sin señal. Su inspección está guardada como borrador: toque Guardar cuando tenga señal."; guardaBorrador(); return pintaForm(); }
   S.enviando = true; pintaForm();
-  const criterios = []; for(let n = 1; n <= 17; n++){ const r = resultadoCrit(F, n), c = F.crit[n]; criterios.push(r === "NC" ? {n:n, r:r, obs:c.obs.trim(), accion:c.accion.trim(), responsable:c.resp.trim(), plazo:c.plazo, fotos:c.fotos} : {n:n, r:r}); }
+  const criterios = []; for(let n = 1; n <= N_CRIT; n++){ const r = resultadoCrit(F, n), c = F.crit[n]; criterios.push(r === "NC" ? {n:n, r:r, obs:c.obs.trim(), accion:c.accion.trim(), responsable:c.resp.trim(), plazo:c.plazo, fotos:c.fotos} : {n:n, r:r}); }
   try{
     const j = await postJ({action:"inspeccion_guardar", id:F.id, area:F.area, respNombre:F.respNombre.trim(), respCargo:F.respCargo.trim(), inspectorCargo:F.inspCargo.trim(), firmaInsp:F.firmaInsp, firmaResp:F.firmaResp,
       puntos:F.puntos.map(p => ({nombre:p.nombre.trim(), c:p.c, obs:p.obs || ""})), criterios:criterios}, 120000);

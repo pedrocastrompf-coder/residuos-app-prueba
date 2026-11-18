@@ -14,24 +14,17 @@ const INSP_TIPOS_CELDA = ["noaprov","organico","papel","plastico","vidrio","meta
 const INSP_RES = ["C","NC","NA"];
 const INSP_MAX_PUNTOS = 8;
 // n → [texto del criterio (formato Vs 06), tipo de hallazgo que se crea si es NC]
+const INSP_N_CRIT = 9;
 const INSP_CRIT = {
-  1:["Segregación, rotulación y delimitación conformes en todos los puntos (ver Sección A)","Segregación de residuos"],
-  2:["Contenedores en buen estado, con bolsa y letrero de colores NTP 900.058","Almacenamiento y acopio"],
-  3:["Sin sobrellenado ni residuos fuera del contenedor; punto limpio y ordenado","Almacenamiento y acopio"],
-  4:["Envolturas laminadas / metalizadas segregadas según instructivo","Segregación de residuos"],
-  5:["Mermas y subproductos separados, identificados y con destino registrado","Segregación de residuos"],
-  6:["Acopio temporal en condiciones (techo, piso, señalización, contención)","Almacenamiento y acopio"],
-  7:["Residuos peligrosos y RAEE en recipiente cerrado y rotulado","Almacenamiento y acopio"],
-  8:["Químicos almacenados según FDS, con bandeja antiderrame y rótulo","Almacenamiento y acopio"],
-  9:["Kit antiderrames completo y accesible","Derrames y fugas"],
-  10:["Trampas de grasa operativas","Efluentes y desagües"],
-  11:["Efluentes de lavado CIP neutralizados antes de descargar","Efluentes y desagües"],
-  12:["Sin humo, olores, polvo ni fugas de refrigerante anormales","Otro"],
-  13:["Sin fugas de agua, vapor, aire o gas; equipos apagados si no se usan","Uso de agua y energía"],
-  14:["Flujómetros operativos","Uso de agua y energía"],
-  15:["Residuos en zona de proceso sin riesgo de plagas ni contaminación cruzada","Orden y limpieza"],
-  16:["Personal conoce aspectos ambientales, colores y respuesta a derrames","Otro"],
-  17:["Otro","Otro"]
+  1:["Segregación, rotulación y delimitación conformes en todos los puntos (se calcula de la Sección B)","Segregación de residuos"],
+  2:["Contenedores en buen estado y con bolsa","Almacenamiento y acopio"],
+  3:["Sin sobrellenado ni residuos fuera del contenedor; zona limpia, sin riesgo de plagas ni contaminación cruzada","Orden y limpieza"],
+  4:["Mermas, subproductos y envolturas laminadas segregados, con destino registrado","Segregación de residuos"],
+  5:["Acopio temporal en condiciones (techo, piso, señalización, contención)","Almacenamiento y acopio"],
+  6:["Residuos peligrosos y RAEE en recipiente cerrado y rotulado","Almacenamiento y acopio"],
+  7:["Químicos con FDS y bandeja antiderrame; kit antiderrames completo y accesible","Almacenamiento y acopio"],
+  8:["Sin humo, olores, polvo ni fugas de refrigerante anormales","Otro"],
+  9:["Sin fugas de agua, vapor, aire o gas; equipos apagados si no se usan; flujómetros operativos","Uso de agua y energía"]
 };
 
 function inspTxt_(v){ return String(v == null ? "" : v).trim().replace(/\s+/g, " "); }
@@ -73,8 +66,8 @@ function inspValidar_(b){
     puntos.push({nombre:nombre, c:c, obs:obs});
   }
   const C = Array.isArray(b.criterios) ? b.criterios : [], crit = [], hallazgos = [];
-  if (C.length !== 17) return {ok:false, error:"criterios_invalidos"};
-  for (let n = 1; n <= 17; n++){
+  if (C.length !== INSP_N_CRIT) return {ok:false, error:"criterios_invalidos"};
+  for (let n = 1; n <= INSP_N_CRIT; n++){
     const x = C.filter(y => y && Number(y.n) === n)[0];
     if (!x || INSP_RES.indexOf(x.r) < 0) return {ok:false, error:"criterios_invalidos"};
     const obs = inspTxt_(x.obs);
@@ -152,7 +145,7 @@ function pruebaInspecciones(){
   const px = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
   const FIRMA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
   const ar = hzAreasTodas_().filter(a => a.activo)[0]; if (!ar){ Logger.log("Cree primero un área en la pestaña Áreas."); return; }
-  const crit = []; for (let n = 1; n <= 17; n++) crit.push(n === 3 ? {n:n, r:"NC", obs:"Contenedor rebosado de prueba", accion:"Retirar y limpiar el punto", responsable:"Responsable de prueba", plazo:hzHoy_(), fotos:[px]} : {n:n, r:"C"});
+  const crit = []; for (let n = 1; n <= INSP_N_CRIT; n++) crit.push(n === 3 ? {n:n, r:"NC", obs:"Contenedor rebosado de prueba", accion:"Retirar y limpiar el punto", responsable:"Responsable de prueba", plazo:hzHoy_(), fotos:[px]} : {n:n, r:"C"});
   const punto = {nombre:"Punto 1", c:{noaprov:"C", organico:"C", papel:"NA", plastico:"C", vidrio:"NA", metal:"NA", peligroso:"NA", mermas:"NA", rotulacion:"C", delimitacion:"C"}, obs:""};
   const id = "prueba-insp-" + Utilities.formatDate(new Date(), "America/Lima", "yyyyMMddHHmmss");
   Logger.log("Guardar: %s", JSON.stringify(inspGuardar_({id:id, area:ar.nombre, respNombre:"Responsable de prueba", respCargo:"Jefe", firmaInsp:FIRMA, firmaResp:FIRMA, puntos:[punto], criterios:crit}, u)));
