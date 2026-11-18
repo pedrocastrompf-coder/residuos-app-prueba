@@ -45,10 +45,11 @@ st.textContent = `
 .in-g{display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px;margin-top:2px}
 .in-ro{border:1px solid var(--line);background:#faf7f3;border-radius:10px;padding:11px 12px;font-size:15px;color:var(--brown)}
 @media(max-width:560px){.in-g{grid-template-columns:1fr 1fr}.in-g-w{grid-column:1/-1}}
-.in-prog{margin:10px 2px 4px;font-size:13px;color:var(--gray);font-weight:600}
+.in-foot{position:sticky;bottom:0;z-index:15;background:#fff;border-top:1px solid var(--line);border-radius:14px 14px 0 0;margin-top:14px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -4px 14px rgba(60,40,20,.08)}
+.in-prog{font-size:13px;color:var(--gray);font-weight:600}
 .in-bar{height:5px;background:var(--line);border-radius:3px;margin-top:5px;overflow:hidden}
 .in-bar i{display:block;height:100%;background:var(--brown);border-radius:3px}
-.in-nav{display:flex;gap:8px;margin:10px 0;justify-content:space-between}
+.in-nav{display:flex;gap:8px;margin:10px 0 0;justify-content:space-between}
 .in-nav .btn,.in-nav span{flex:1}
 .in-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}
 .in-card h3{margin:0 0 6px;font-size:15px;color:var(--brown)}
@@ -198,9 +199,10 @@ function pintaForm(){
       <canvas class="in-fp" data-in-fc="resp"></canvas><div class="in-fb"><span>El responsable firma aquí</span><button type="button" class="btn sec sm" data-in-fl="resp">Borrar firma</button></div></div>
   </div>`;
   const PASOS = ["A. Datos", "B. Segregación", "C. Criterios", "D. Resultado", "E. Firmas"], paso = Math.min(Math.max(S.paso || 0, 0), 4);
-  const barra = `<div class="in-prog"><span>Paso ${paso + 1} de 5 · ${esc(PASOS[paso])}</span><div class="in-bar"><i style="width:${(paso + 1) * 20}%"></i></div></div>`;
-  const nav = `<div class="err" id="in-err">${esc(S.err)}</div><div class="in-nav">${paso > 0 ? `<button class="btn sec" data-in="atras">← Atrás</button>` : `<span></span>`}${paso < 4 ? `<button class="btn" data-in="siguiente">Siguiente →</button>` : `<button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Enviando…" : "Guardar inspección"}</button>`}</div><div class="in-top"><button class="btn sec" style="flex:1" data-in="salir">Guardar borrador y salir</button></div>`;
-  box().innerHTML = barra + [secA, secB, secC, secD, secE][paso] + nav;
+  const prog = `<div class="in-prog"><span>Paso ${paso + 1} de 5 · ${esc(PASOS[paso])}</span><div class="in-bar"><i style="width:${(paso + 1) * 20}%"></i></div></div>`;
+  const nav = `<div class="err" id="in-err">${esc(S.err)}</div><div class="in-top"><button class="btn sec" style="flex:1" data-in="salir">Guardar borrador y salir</button></div>
+    <div class="in-foot">${prog}<div class="in-nav">${paso > 0 ? `<button class="btn sec" data-in="atras">← Atrás</button>` : `<span></span>`}${paso < 4 ? `<button class="btn" data-in="siguiente">Siguiente →</button>` : `<button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Enviando…" : "Guardar inspección"}</button>`}</div></div>`;
+  box().innerHTML = [secA, secB, secC, secD, secE][paso] + nav;
   iniciaFirmas();
 }
 function leeCampos(){
