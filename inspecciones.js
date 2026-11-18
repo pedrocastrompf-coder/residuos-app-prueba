@@ -37,7 +37,7 @@ const ERR = {
   criterios_invalidos:"Faltan criterios por revisar.", nc_invalida:"Una no conformidad no está completa (observación y foto).",
   id_invalido:"La inspección no es válida. Vuelva a empezar.", permiso:"No tiene permiso para esta acción.", clave:"El servidor no reconoce esta acción. Avise al administrador: falta actualizar el script."
 };
-const S = {falta:"", vista:"lista", lista:null, t:0, cargando:false, areas:null, F:null, enviando:false, err:"", sel:null};
+const S = {falta:"", vista:"lista", lista:null, t:0, cargando:false, areas:null, F:null, enviando:false, err:"", sel:null, paso:0};
 
 const st = document.createElement("style");
 st.textContent = `
@@ -45,6 +45,15 @@ st.textContent = `
 .in-g{display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px;margin-top:2px}
 .in-ro{border:1px solid var(--line);background:#faf7f3;border-radius:10px;padding:11px 12px;font-size:15px;color:var(--brown)}
 @media(max-width:560px){.in-g{grid-template-columns:1fr 1fr}.in-g-w{grid-column:1/-1}}
+.in-steps{display:flex;gap:6px;margin:8px 0}
+.in-steps button{flex:1;border:1.5px solid var(--taupe);background:#fff;color:var(--brown);border-radius:10px;padding:6px 2px;font-size:11px;display:flex;flex-direction:column;align-items:center;line-height:1.25;min-width:0}
+.in-steps button b{font-size:15px}
+.in-steps button span{display:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.in-steps button.on{background:var(--brown);color:#fff;border-color:var(--brown)}
+.in-steps button.ok{border-color:var(--ok);color:var(--ok)}
+@media(min-width:700px){.in-steps button span{display:block}}
+.in-nav{display:flex;gap:8px;margin:10px 0;justify-content:space-between}
+.in-nav .btn,.in-nav span{flex:1}
 .in-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}
 .in-card h3{margin:0 0 6px;font-size:15px;color:var(--brown)}
 .in-card .s{font-size:12.5px;color:var(--gray);margin:0 0 8px}
@@ -179,8 +188,8 @@ function pintaForm(){
           <label class="f">Plazo</label><input class="in" type="date" data-in-pz="${n}" min="${hoy()}" max="${masDias(hoy(), 365)}" value="${esc(c.plazo || "")}"></div>` : "") + `</div>`;
     }).join("") ).join("") + `</div>`;
   const secD = `<div class="in-card"><h3>D. Resultado</h3>
-    <div class="in-res ${claseCal(cal)}"><b>${p === null ? "s/d" : p + " %"}</b> ${esc(cal || "Sin criterios aplicables")}<div class="s">Conformidad = conformes ÷ (conformes + no conformes). Los N/A no cuentan. Cortes provisionales: ≥ ${CORTES.sat} % satisfactorio, ${CORTES.ace}–${CORTES.sat - 0.1} % aceptable con acciones, menor a ${CORTES.ace} % no satisfactorio.</div></div></div>
-  <div class="in-card"><h3>E. Firmas</h3>
+    <div class="in-res ${claseCal(cal)}"><b>${p === null ? "s/d" : p + " %"}</b> ${esc(cal || "Sin criterios aplicables")}<div class="s">Conformidad = conformes ÷ (conformes + no conformes). Los N/A no cuentan. Cortes provisionales: ≥ ${CORTES.sat} % satisfactorio, ${CORTES.ace}–${CORTES.sat - 0.1} % aceptable con acciones, menor a ${CORTES.ace} % no satisfactorio.</div></div></div>`;
+  const secE = `<div class="in-card"><h3>E. Firmas</h3>
     <div class="in-pt"><p class="s" style="margin:0 0 4px"><b>Responsable de Medio Ambiente (inspector)</b></p>
       <label class="f">Nombres y apellidos</label><div style="font-size:15px;padding:2px 0">${esc(SES ? SES.nombre : "")}</div>
       <label class="f" for="in-ic">Cargo</label><input id="in-ic" class="in" autocomplete="off" maxlength="40" value="${esc(F.inspCargo)}">
@@ -191,9 +200,11 @@ function pintaForm(){
       <label class="f" for="in-rc">Cargo</label><input id="in-rc" class="in" autocomplete="off" maxlength="40" value="${esc(F.respCargo)}">
       <label class="f">Firma</label>
       <canvas class="in-fp" data-in-fc="resp"></canvas><div class="in-fb"><span>El responsable firma aquí</span><button type="button" class="btn sec sm" data-in-fl="resp">Borrar firma</button></div></div>
-    <div class="err" id="in-err">${esc(S.err)}</div>
-    <div class="in-top"><button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Enviando…" : "Guardar inspección"}</button><button class="btn sec" data-in="salir">Guardar borrador y salir</button></div></div>`;
-  box().innerHTML = secA + secB + secC + secD;
+  </div>`;
+  const PASOS = ["A. Datos", "B. Segregación", "C. Criterios", "D. Resultado", "E. Firmas"], paso = Math.min(Math.max(S.paso || 0, 0), 4);
+  const barra = `<div class="in-steps">${PASOS.map((t, i) => `<button type="button" data-in-paso="${i}" class="${i === paso ? "on" : i < paso ? "ok" : ""}"><b>${t[0]}</b><span>${t.slice(3)}</span></button>`).join("")}</div>`;
+  const nav = `<div class="err" id="in-err">${esc(S.err)}</div><div class="in-nav">${paso > 0 ? `<button class="btn sec" data-in="atras">← Atrás</button>` : `<span></span>`}${paso < 4 ? `<button class="btn" data-in="siguiente">Siguiente →</button>` : `<button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Enviando…" : "Guardar inspección"}</button>`}</div><div class="in-top"><button class="btn sec sm" data-in="salir">Guardar borrador y salir</button></div>`;
+  box().innerHTML = barra + [secA, secB, secC, secD, secE][paso] + nav;
   iniciaFirmas();
 }
 function leeCampos(){
@@ -208,6 +219,11 @@ function leeCampos(){
   box().querySelectorAll("[data-in-a]").forEach(e => { F.crit[+e.dataset.inA].accion = e.value; });
   box().querySelectorAll("[data-in-rs]").forEach(e => { F.crit[+e.dataset.inRs].resp = e.value; });
   box().querySelectorAll("[data-in-pz]").forEach(e => { F.crit[+e.dataset.inPz].plazo = e.value; });
+}
+const pasoDe = m => /^Elija el área/.test(m) ? 0 : /^(Cada punto|Punto de)/.test(m) ? 1 : /^Criterio/.test(m) ? 2 : 4;
+function irA(sel){
+  const el = sel && box().querySelector(sel);
+  if(el){ el.scrollIntoView({block:"center", behavior:"smooth"}); const c = el.closest(".c, .in-crit"); if(c){ c.style.outline = "2px solid var(--red)"; c.style.borderRadius = "8px"; } }
 }
 function validaLocal(F){
   if(!F.area) return "Elija el área.";
@@ -235,9 +251,8 @@ async function enviar(){
   const F = S.F; if(!F || S.enviando) return; leeCampos();
   S.falta = ""; S.err = validaLocal(F);
   if(S.err){
-    pintaForm();
-    const el = S.falta && box().querySelector(S.falta);
-    if(el){ el.scrollIntoView({block:"center", behavior:"smooth"}); const c = el.closest(".c, .in-crit"); if(c){ c.style.outline = "2px solid var(--red)"; c.style.borderRadius = "8px"; } }
+    S.paso = pasoDe(S.err);
+    pintaForm(); irA(S.falta);
     return;
   }
   if(!navigator.onLine){ S.err = "Sin señal. Su inspección está guardada como borrador: toque Guardar cuando tenga señal."; guardaBorrador(); return pintaForm(); }
@@ -250,6 +265,7 @@ async function enviar(){
     if(j && j.ok){ try{ localStorage.setItem("insp_cargo:" + (SES && SES.usuario), F.inspCargo.trim()); }catch(e){} borraBorrador(); S.F = null; S.vista = "lista"; S.lista = null; S.err = ""; toast("Inspección guardada" + (j.hallazgos && j.hallazgos.length ? " · " + j.hallazgos.length + " hallazgo(s) creados" : "")); pintaLista(); carga(); return; }
     S.err = (j && (j.error === "sesion" || j.error === "cambiar_clave")) ? "Su sesión venció. Ingrese de nuevo: lo escrito se conserva." : (j && j.error === "nc_invalida" && j.criterio ? "Criterio " + j.criterio + ": revise observación y foto." : ERR[j && j.error] || "No se pudo guardar. Intente de nuevo.");
   }catch(e){ S.enviando = false; S.err = "Sin señal o respuesta lenta. Su inspección sigue como borrador: intente de nuevo."; }
+  if(/^Criterio/.test(S.err)) S.paso = 2;
   guardaBorrador(); pintaForm();
 }
 
@@ -376,17 +392,24 @@ document.addEventListener("click", async ev => {
   const cb = t.closest("[data-in-c]");
   if(cb && F){ leeCampos(); const [i, k] = cb.dataset.inC.split("|"); F.puntos[+i].c[k] = cb.dataset.v; guardaBorrador(); pintaForm(); return; }
   const rb = t.closest("[data-in-r]"); if(rb && F){ leeCampos(); const [n, k] = rb.dataset.inR.split("|"); F.crit[+n].r = k; guardaBorrador(); pintaForm(); return; }
+  const pp = t.closest("[data-in-paso]"); if(pp && F){ leeCampos(); S.err = ""; S.paso = +pp.dataset.inPaso; pintaForm(); window.scrollTo(0, 0); return; }
   const pq = t.closest("[data-in-pq]"); if(pq && F){ leeCampos(); F.puntos.splice(+pq.dataset.inPq, 1); guardaBorrador(); pintaForm(); return; }
   const fq = t.closest("[data-in-fq]"); if(fq && F){ leeCampos(); const [n, i] = fq.dataset.inFq.split("|"); F.crit[+n].fotos.splice(+i, 1); pintaForm(); return; }
   const fl = t.closest("[data-in-fl]"); if(fl && F){ if(fl.dataset.inFl === "insp") F.firmaInsp = ""; else F.firmaResp = ""; guardaBorrador(); pintaForm(); return; }
   const k = t.closest("[data-in]"); if(!k) return; const a = k.dataset.in;
   if(a === "pdf" || a === "imprimir"){ const i = (S.lista || []).find(x => x.id === S.sel); if(i) (a === "pdf" ? compartirInsp : imprimirInsp)(i, k); return; }
-  if(a === "nueva"){ S.F = nuevoForm(); S.vista = "form"; S.err = ""; guardaBorrador(); pintaForm(); cargaAreas(); }
-  else if(a === "seguir"){ S.F = leeBorrador(); S.vista = "form"; S.err = ""; pintaForm(); cargaAreas(); }
+  if(a === "nueva"){ S.F = nuevoForm(); S.paso = 0; S.vista = "form"; S.err = ""; guardaBorrador(); pintaForm(); cargaAreas(); }
+  else if(a === "seguir"){ S.F = leeBorrador(); S.paso = 0; S.vista = "form"; S.err = ""; pintaForm(); cargaAreas(); }
   else if(a === "descartar"){ if(confirm("¿Descartar la inspección sin terminar?")){ borraBorrador(); pintaLista(); } }
   else if(a === "lista"){ S.vista = "lista"; repinta(); }
   else if(a === "punto" && F){ leeCampos(); F.puntos.push(nuevoPunto(F.puntos.length + 1)); guardaBorrador(); pintaForm(); }
   else if(a === "salir" && F){ leeCampos(); guardaBorrador(); S.F = null; S.vista = "lista"; pintaLista(); }
+  else if(a === "siguiente" && F){
+    leeCampos(); S.falta = ""; const e = validaLocal(F);
+    if(e && pasoDe(e) <= S.paso){ S.err = e; guardaBorrador(); pintaForm(); irA(S.falta); }
+    else { S.err = ""; S.paso = Math.min(S.paso + 1, 4); guardaBorrador(); pintaForm(); window.scrollTo(0, 0); }
+  }
+  else if(a === "atras" && F){ leeCampos(); S.err = ""; S.paso = Math.max(S.paso - 1, 0); guardaBorrador(); pintaForm(); window.scrollTo(0, 0); }
   else if(a === "enviar") enviar();
 });
 document.addEventListener("change", async ev => {
