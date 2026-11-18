@@ -29,7 +29,7 @@ const ERR = {
   planta_bloqueada:"Esta planta apunta a una hoja distinta de la copia de prueba. Revise la pestaña Plantas.", criterios_invalidos:"El servidor tiene una versión anterior del script de inspecciones. Pegue el Inspecciones.gs más reciente y publique una nueva versión; lo escrito se conserva.", nc_invalida:"Una no conformidad no está completa (observación y foto).",
   id_invalido:"La inspección no es válida. Vuelva a empezar.", permiso:"No tiene permiso para esta acción.", clave:"El servidor no reconoce esta acción. Avise al administrador: falta actualizar el script."
 };
-const S = {falta:"", vista:"lista", lista:null, t:0, cargando:false, areas:null, F:null, enviando:false, err:"", sel:null, paso:0};
+const S = {falta:"", vista:"lista", lista:null, t:0, cargando:false, areas:null, F:null, enviando:false, err:"", sel:null, paso:0, fin:false};
 
 const st = document.createElement("style");
 st.textContent = `
@@ -37,6 +37,7 @@ st.textContent = `
 .in-g{display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px;margin-top:2px}
 .in-ro{border:1px solid var(--line);background:#faf7f3;border-radius:10px;padding:11px 12px;font-size:15px;color:var(--brown)}
 @media(max-width:560px){.in-g{grid-template-columns:1fr 1fr}.in-g-w{grid-column:1/-1}}
+.in-ok{background:#e8f3ea;color:var(--ok);border-radius:12px;padding:11px 12px;font-weight:700;margin:8px 0}
 .in-foot{position:sticky;bottom:0;z-index:15;background:#fff;border-top:1px solid var(--line);border-radius:14px 14px 0 0;margin-top:14px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -4px 14px rgba(60,40,20,.08)}
 .in-prog{font-size:13px;color:var(--gray);font-weight:600}
 .in-bar{height:5px;background:var(--line);border-radius:3px;margin-top:5px;overflow:hidden}
@@ -146,7 +147,7 @@ function pintaLista(){
 }
 function pintaDetalle(){
   const i = (S.lista || []).find(x => x.id === S.sel); if(!i){ S.vista = "lista"; return pintaLista(); }
-  box().innerHTML = `<div class="in-top"><button class="btn sec sm" data-in="lista">← Historial</button></div><div class="in-top"><button class="btn" data-in="pdf">Compartir PDF</button><button class="btn sec" data-in="imprimir">Imprimir</button></div>` +
+  box().innerHTML = `<div class="in-top"><button class="btn sec sm" data-in="lista">← Historial</button></div>${S.fin ? `<div class="in-ok">✔ Inspección terminada y registrada</div>` : ""}<div class="in-top"><button class="btn" style="flex:1" data-in="descargar">Descargar PDF</button><button class="btn sec" style="flex:1" data-in="pdf">Compartir</button></div><div class="in-top"><button class="btn sec" style="flex:1" data-in="imprimir">Imprimir</button></div>` +
     `<div class="in-res ${claseCal(i.calificacion)}"><div>${esc(i.area)} · ${fecha(i.fecha)} ${esc(i.hora)}</div><b>${esc(i.pct === "" ? "s/d" : i.pct + " %")}</b> ${esc(i.calificacion)}</div>` +
     `<div class="hz-kv"><span>Inspector</span><span>${esc(i.inspectorNombre)}</span><span>Responsable</span><span>${esc(i.respNombre)}${i.respCargo ? " · " + esc(i.respCargo) : ""}</span><span>Hallazgos</span><span>${(i.hallazgos || []).length ? esc(i.hallazgos.join(", ")) : "Ninguno"}</span></div>` +
     `<div class="in-card"><h3>Criterios</h3>${(i.criterios || []).map(c => `<div class="in-crit"><span class="n">${c.n}.</span> ${esc(CRIT[c.n])} — <b>${esc(c.r)}</b>${c.obs ? `<div class="s">${esc(c.obs)}</div>` : ""}${c.accion ? `<div class="s">Acción: ${esc(c.accion)} · Responsable: ${esc(c.responsable || "")} · Plazo: ${esc(fecha(c.plazo))}</div>` : ""}</div>`).join("")}</div>`;
@@ -197,7 +198,7 @@ function pintaForm(){
   const PASOS = ["A. Datos", "B. Segregación", "C. Criterios", "D. Resultado", "E. Firmas"], paso = Math.min(Math.max(S.paso || 0, 0), 4);
   const prog = `<div class="in-prog"><span>Paso ${paso + 1} de 5 · ${esc(PASOS[paso])}</span><div class="in-bar"><i style="width:${(paso + 1) * 20}%"></i></div></div>`;
   const nav = `<div class="err" id="in-err">${esc(S.err)}</div><div class="in-top"><button class="btn sec" style="flex:1" data-in="salir">Guardar borrador y salir</button></div>
-    <div class="in-foot">${prog}<div class="in-nav">${paso > 0 ? `<button class="btn sec" data-in="atras">← Atrás</button>` : `<span></span>`}${paso < 4 ? `<button class="btn" data-in="siguiente">Siguiente →</button>` : `<button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Enviando…" : "Guardar inspección"}</button>`}</div></div>`;
+    <div class="in-foot">${prog}<div class="in-nav">${paso > 0 ? `<button class="btn sec" data-in="atras">← Atrás</button>` : `<span></span>`}${paso < 4 ? `<button class="btn" data-in="siguiente">Siguiente →</button>` : `<button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Terminando…" : "Terminar inspección"}</button>`}</div></div>`;
   box().innerHTML = [secA, secB, secC, secD, secE][paso] + nav;
   iniciaFirmas();
 }
@@ -249,14 +250,16 @@ async function enviar(){
     pintaForm(); irA(S.falta);
     return;
   }
-  if(!navigator.onLine){ S.err = "Sin señal. Su inspección está guardada como borrador: toque Guardar cuando tenga señal."; guardaBorrador(); return pintaForm(); }
+  if(!navigator.onLine){ S.err = "Sin señal. Su inspección está guardada como borrador: toque Terminar inspección cuando tenga señal."; guardaBorrador(); return pintaForm(); }
   S.enviando = true; pintaForm();
   const criterios = []; for(let n = 1; n <= N_CRIT; n++){ const r = resultadoCrit(F, n), c = F.crit[n]; criterios.push(r === "NC" ? {n:n, r:r, obs:c.obs.trim(), accion:c.accion.trim(), responsable:c.resp.trim(), plazo:c.plazo, fotos:c.fotos} : {n:n, r:r}); }
   try{
     const j = await postJ({action:"inspeccion_guardar", id:F.id, area:F.area, respNombre:F.respNombre.trim(), respCargo:F.respCargo.trim(), inspectorCargo:F.inspCargo.trim(), firmaInsp:F.firmaInsp, firmaResp:F.firmaResp,
       puntos:F.puntos.map(p => ({nombre:p.nombre.trim(), c:p.c, obs:p.obs || ""})), criterios:criterios}, 120000);
     S.enviando = false;
-    if(j && j.ok){ try{ localStorage.setItem("insp_cargo:" + (SES && SES.usuario), F.inspCargo.trim()); }catch(e){} borraBorrador(); S.F = null; S.vista = "lista"; S.lista = null; S.err = ""; toast("Inspección guardada" + (j.hallazgos && j.hallazgos.length ? " · " + j.hallazgos.length + " hallazgo(s) creados" : "")); pintaLista(); carga(); return; }
+    if(j && j.ok){ try{ localStorage.setItem("insp_cargo:" + (SES && SES.usuario), F.inspCargo.trim()); }catch(e){} borraBorrador(); const idNueva = F.id; S.F = null; S.vista = "lista"; S.lista = null; S.err = ""; toast("Inspección terminada" + (j.hallazgos && j.hallazgos.length ? " · " + j.hallazgos.length + " hallazgo(s) creados" : "")); pintaLista(); await carga();
+      if((S.lista || []).some(x => x.id === idNueva)){ S.sel = idNueva; S.vista = "detalle"; S.fin = true; repinta(); window.scrollTo(0, 0); }
+      return; }
     S.err = (j && (j.error === "sesion" || j.error === "cambiar_clave")) ? "Su sesión venció. Ingrese de nuevo: lo escrito se conserva." : (j && j.error === "nc_invalida" && j.criterio ? "Criterio " + j.criterio + ": revise observación y foto." : ERR[j && j.error] || "No se pudo guardar. Intente de nuevo.");
   }catch(e){ S.enviando = false; S.err = "Sin señal o respuesta lenta. Su inspección sigue como borrador: intente de nuevo."; }
   if(/^Criterio/.test(S.err)) S.paso = 2;
@@ -353,11 +356,11 @@ async function pdfInspeccion(i){
     return new File([pdf.output("blob")], nombreArchivo(i) + ".pdf", {type:"application/pdf"});
   } finally { w.remove(); }
 }
-async function compartirInsp(i, btn){
+async function compartirInsp(i, btn, soloDescargar){
   const t0 = btn.textContent; btn.disabled = true; btn.textContent = "Preparando PDF…";
   try{
     const file = await pdfInspeccion(i);
-    if(navigator.canShare && navigator.canShare({files:[file]})){
+    if(!soloDescargar && navigator.canShare && navigator.canShare({files:[file]})){
       try{ await navigator.share({files:[file], title:file.name, text:"Inspección ambiental " + i.area + " · " + fecha(i.fecha)}); }catch(e){}
     } else {
       const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
@@ -382,7 +385,7 @@ async function imprimirInsp(i, btn){
 document.addEventListener("click", async ev => {
   if(!document.getElementById("v-insp") || document.getElementById("v-insp").classList.contains("hidden")) return;
   const t = ev.target, F = S.F;
-  const ver = t.closest("[data-in-ver]"); if(ver){ S.sel = ver.dataset.inVer; S.vista = "detalle"; repinta(); return; }
+  const ver = t.closest("[data-in-ver]"); if(ver){ S.sel = ver.dataset.inVer; S.fin = false; S.vista = "detalle"; repinta(); return; }
   const cb = t.closest("[data-in-c]");
   if(cb && F){ leeCampos(); const [i, k] = cb.dataset.inC.split("|"); F.puntos[+i].c[k] = cb.dataset.v; guardaBorrador(); pintaForm(); return; }
   const rb = t.closest("[data-in-r]"); if(rb && F){ leeCampos(); const [n, k] = rb.dataset.inR.split("|"); F.crit[+n].r = k; guardaBorrador(); pintaForm(); return; }
@@ -390,11 +393,11 @@ document.addEventListener("click", async ev => {
   const fq = t.closest("[data-in-fq]"); if(fq && F){ leeCampos(); const [n, i] = fq.dataset.inFq.split("|"); F.crit[+n].fotos.splice(+i, 1); pintaForm(); return; }
   const fl = t.closest("[data-in-fl]"); if(fl && F){ if(fl.dataset.inFl === "insp") F.firmaInsp = ""; else F.firmaResp = ""; guardaBorrador(); pintaForm(); return; }
   const k = t.closest("[data-in]"); if(!k) return; const a = k.dataset.in;
-  if(a === "pdf" || a === "imprimir"){ const i = (S.lista || []).find(x => x.id === S.sel); if(i) (a === "pdf" ? compartirInsp : imprimirInsp)(i, k); return; }
+  if(a === "pdf" || a === "descargar" || a === "imprimir"){ const i = (S.lista || []).find(x => x.id === S.sel); if(i){ if(a === "imprimir") imprimirInsp(i, k); else compartirInsp(i, k, a === "descargar"); } return; }
   if(a === "nueva"){ S.F = nuevoForm(); S.paso = 0; S.vista = "form"; S.err = ""; guardaBorrador(); pintaForm(); cargaAreas(); }
   else if(a === "seguir"){ S.F = leeBorrador(); S.paso = 0; S.vista = "form"; S.err = ""; pintaForm(); cargaAreas(); }
   else if(a === "descartar"){ if(confirm("¿Descartar la inspección sin terminar?")){ borraBorrador(); pintaLista(); } }
-  else if(a === "lista"){ S.vista = "lista"; repinta(); }
+  else if(a === "lista"){ S.fin = false; S.vista = "lista"; repinta(); }
   else if(a === "punto" && F){ leeCampos(); F.puntos.push(nuevoPunto(F.puntos.length + 1)); guardaBorrador(); pintaForm(); }
   else if(a === "salir" && F){ leeCampos(); guardaBorrador(); S.F = null; S.vista = "lista"; pintaLista(); }
   else if(a === "siguiente" && F){
