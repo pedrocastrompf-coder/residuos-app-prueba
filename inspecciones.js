@@ -168,12 +168,12 @@ function pintaForm(){
       return `<div class="in-crit"><div class="t"><span class="n">${n}.</span> ${esc(CRIT[n])}</div>` +
         (auto ? `<span class="hz-b ${r === "C" ? "cer" : r === "NC" ? "venc" : "abi"}">${r === "" ? "Pendiente: se calcula con la sección B" : (r === "NA" ? "N/A" : r) + " (automático)"}</span>` : `<span class="in-sg">${RESP.map(([k]) => `<button type="button" data-in-r="${n}|${k}" class="${k}${c.r === k ? " on" : ""}">${k === "NA" ? "N/A" : k}</button>`).join("")}</span>`) +
         (r === "NC" ? `<div class="in-nc"><label class="f">Observación</label><textarea class="in" data-in-o="${n}" maxlength="300" placeholder="¿Qué se observó? (mínimo 5 letras)">${esc(c.obs)}</textarea>
-          <label class="f">Acción correctiva</label><textarea class="in" data-in-a="${n}" maxlength="300" placeholder="¿Qué se hará para corregirlo? (mínimo 5 letras)">${esc(c.accion || "")}</textarea>
-          <label class="f">Responsable de la acción</label><input class="in" data-in-rs="${n}" maxlength="60" autocomplete="off" placeholder="Nombre y apellidos" value="${esc(c.resp || "")}">
-          <label class="f">Plazo</label><input class="in" type="date" data-in-pz="${n}" min="${hoy()}" max="${masDias(hoy(), 365)}" value="${esc(c.plazo || "")}">
           <label class="f">Fotos con la observación marcada</label>
           <div class="hz-thumbs">${c.fotos.map((f, fi) => `<div class="hz-thumb"><img src="${f}" alt=""><button type="button" data-in-fq="${n}|${fi}">✕</button></div>`).join("")}</div>
-          ${c.fotos.length < MAX_FOTOS ? `<label class="btn sec sm" style="display:inline-block">📷 Foto con la marca<input type="file" accept="image/*" capture="environment" data-in-f="${n}" hidden></label>` : ""}</div>` : "") + `</div>`;
+          ${c.fotos.length < MAX_FOTOS ? `<label class="btn sec sm" style="display:inline-block">📷 Foto con la marca<input type="file" accept="image/*" capture="environment" data-in-f="${n}" hidden></label>` : ""}
+          <label class="f">Acción correctiva</label><textarea class="in" data-in-a="${n}" maxlength="300" placeholder="¿Qué se hará para corregirlo? (mínimo 5 letras)">${esc(c.accion || "")}</textarea>
+          <label class="f">Responsable de la acción</label><input class="in" data-in-rs="${n}" maxlength="60" autocomplete="off" placeholder="Nombre y apellidos" value="${esc(c.resp || "")}">
+          <label class="f">Plazo</label><input class="in" type="date" data-in-pz="${n}" min="${hoy()}" max="${masDias(hoy(), 365)}" value="${esc(c.plazo || "")}"></div>` : "") + `</div>`;
     }).join("") ).join("") + `</div>`;
   const secD = `<div class="in-card"><h3>D. Resultado</h3>
     <div class="in-res ${claseCal(cal)}"><b>${p === null ? "s/d" : p + " %"}</b> ${esc(cal || "Sin criterios aplicables")}<div class="s">Conformidad = conformes ÷ (conformes + no conformes). Los N/A no cuentan. Cortes provisionales: ≥ ${CORTES.sat} % satisfactorio, ${CORTES.ace}–${CORTES.sat - 0.1} % aceptable con acciones, menor a ${CORTES.ace} % no satisfactorio.</div></div></div>
