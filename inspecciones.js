@@ -169,15 +169,19 @@ function pintaForm(){
           <div class="hz-thumbs">${c.fotos.map((f, fi) => `<div class="hz-thumb"><img src="${f}" alt=""><button type="button" data-in-fq="${n}|${fi}">✕</button></div>`).join("")}</div>
           ${c.fotos.length < MAX_FOTOS ? `<label class="btn sec sm" style="display:inline-block">📷 Foto con la marca<input type="file" accept="image/*" capture="environment" data-in-f="${n}" hidden></label>` : ""}</div>` : "") + `</div>`;
     }).join("") + `<label class="in-ok"><input type="checkbox" data-in-b="${bi}" ${F.bloques[bi] ? "checked" : ""}> Revisé este bloque</label>`).join("") + `</div>`;
-  const secD = `<div class="in-card"><h3>Resultado y responsable</h3>
-    <div class="in-res ${claseCal(cal)}"><b>${p === null ? "s/d" : p + " %"}</b> ${esc(cal || "Sin criterios aplicables")}<div class="s">Conformidad = conformes ÷ (conformes + no conformes). Los N/A no cuentan. Cortes provisionales: ≥ ${CORTES.sat} % satisfactorio, ${CORTES.ace}–${CORTES.sat - 0.1} % aceptable con acciones, menor a ${CORTES.ace} % no satisfactorio.</div></div>
-    <label class="f" for="in-rn">Responsable del área (nombre y apellidos)</label><input id="in-rn" class="in" autocomplete="off" maxlength="60" value="${esc(F.respNombre)}">
-    <label class="f" for="in-rc">Cargo del responsable del área</label><input id="in-rc" class="in" autocomplete="off" maxlength="40" value="${esc(F.respCargo)}">
-    <label class="f" for="in-ic">Cargo del inspector</label><input id="in-ic" class="in" autocomplete="off" maxlength="40" value="${esc(F.inspCargo)}">
-    <label class="f">Firma del inspector (${esc(SES ? SES.nombre : "")})</label>
-    <canvas class="in-fp" data-in-fc="insp"></canvas><div class="in-fb"><span>Firme con el dedo</span><button type="button" class="btn sec sm" data-in-fl="insp">Borrar firma</button></div>
-    <label class="f">Firma del responsable del área</label>
-    <canvas class="in-fp" data-in-fc="resp"></canvas><div class="in-fb"><span>El responsable firma aquí</span><button type="button" class="btn sec sm" data-in-fl="resp">Borrar firma</button></div>
+  const secD = `<div class="in-card"><h3>D. Resultado</h3>
+    <div class="in-res ${claseCal(cal)}"><b>${p === null ? "s/d" : p + " %"}</b> ${esc(cal || "Sin criterios aplicables")}<div class="s">Conformidad = conformes ÷ (conformes + no conformes). Los N/A no cuentan. Cortes provisionales: ≥ ${CORTES.sat} % satisfactorio, ${CORTES.ace}–${CORTES.sat - 0.1} % aceptable con acciones, menor a ${CORTES.ace} % no satisfactorio.</div></div></div>
+  <div class="in-card"><h3>E. Firmas</h3>
+    <div class="in-pt"><p class="s" style="margin:0 0 4px"><b>Responsable de Medio Ambiente (inspector)</b></p>
+      <label class="f">Nombres y apellidos</label><div style="font-size:15px;padding:2px 0">${esc(SES ? SES.nombre : "")}</div>
+      <label class="f" for="in-ic">Cargo</label><input id="in-ic" class="in" autocomplete="off" maxlength="40" value="${esc(F.inspCargo)}">
+      <label class="f">Firma</label>
+      <canvas class="in-fp" data-in-fc="insp"></canvas><div class="in-fb"><span>Firme con el dedo</span><button type="button" class="btn sec sm" data-in-fl="insp">Borrar firma</button></div></div>
+    <div class="in-pt"><p class="s" style="margin:0 0 4px"><b>Responsable del área inspeccionada</b></p>
+      <label class="f" for="in-rn">Nombres y apellidos</label><input id="in-rn" class="in" autocomplete="off" maxlength="60" placeholder="Jefe, líder o encargado" value="${esc(F.respNombre)}">
+      <label class="f" for="in-rc">Cargo</label><input id="in-rc" class="in" autocomplete="off" maxlength="40" value="${esc(F.respCargo)}">
+      <label class="f">Firma</label>
+      <canvas class="in-fp" data-in-fc="resp"></canvas><div class="in-fb"><span>El responsable firma aquí</span><button type="button" class="btn sec sm" data-in-fl="resp">Borrar firma</button></div></div>
     <div class="err" id="in-err">${esc(S.err)}</div>
     <div class="in-top"><button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Enviando…" : "Guardar inspección"}</button><button class="btn sec" data-in="salir">Guardar borrador y salir</button></div></div>`;
   box().innerHTML = secA + secB + secC + secD;
