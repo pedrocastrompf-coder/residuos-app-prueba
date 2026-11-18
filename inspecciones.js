@@ -58,6 +58,7 @@ st.textContent = `
 .in-res{border-left:6px solid var(--taupe);border-radius:12px;background:#fff;padding:12px;margin:10px 0;border:1px solid var(--line);border-left-width:6px}
 .in-res.sat{border-left-color:var(--ok)} .in-res.ace{border-left-color:var(--orange)} .in-res.nos{border-left-color:var(--red)}
 .in-res b{font-size:22px;color:var(--brown)}
+.in-card .in{width:100%;box-sizing:border-box}
 .in-fp{border:1.5px dashed var(--taupe);border-radius:10px;background:#fff;touch-action:none;width:100%;height:130px;display:block}
 .in-fb{display:flex;justify-content:space-between;align-items:center;margin:4px 0 12px;font-size:12.5px;color:var(--gray)}
 .insp-printarea{display:none}.insp-pdfw{position:absolute;left:-99999px;top:0;width:1122px;background:#fff}
@@ -95,7 +96,14 @@ function nuevoForm(){
   return {id:"insp-" + uuid(), area:"", puntos:[nuevoPunto(1)], crit:crit, bloques:{}, respNombre:"", respCargo:"", inspCargo:(function(){ try{ return localStorage.getItem("insp_cargo:" + (SES && SES.usuario)) || "Medio Ambiente"; }catch(e){ return "Medio Ambiente"; } })(), firmaInsp:"", firmaResp:"", t0:hoy() + " " + hora()};
 }
 function guardaBorrador(){ try{ if(S.F) localStorage.setItem(BORR + ":" + (SES && SES.usuario), JSON.stringify(S.F)); }catch(e){} }   // las fotos pueden pesar: si no cabe, no pasa nada
-function leeBorrador(){ try{ const t = localStorage.getItem(BORR + ":" + (SES && SES.usuario)); return t ? JSON.parse(t) : null; }catch(e){ return null; } }
+function leeBorrador(){
+  try{
+    const t = localStorage.getItem(BORR + ":" + (SES && SES.usuario)); if(!t) return null;
+    const b = JSON.parse(t), base = nuevoForm();   // un borrador de una versión anterior puede no traer campos nuevos
+    Object.keys(base).forEach(k => { if(b[k] === undefined || b[k] === null) b[k] = base[k]; });
+    return b;
+  }catch(e){ return null; }
+}
 function borraBorrador(){ try{ localStorage.removeItem(BORR + ":" + (SES && SES.usuario)); }catch(e){} }
 
 /* ---------- datos ---------- */
@@ -145,11 +153,11 @@ function pintaForm(){
   const areas = S.areas || [];
   const p = porcentaje(F), cal = calif(p);
   const secA = `<div class="in-card"><h3>A. Datos de la inspección</h3>
-    <label>Área</label><select id="in-area"><option value="">Elija el área…</option>${areas.map(a => `<option ${a.nombre === F.area ? "selected" : ""}>${esc(a.nombre)}</option>`).join("")}</select>
+    <label class="f" for="in-area">Área</label><select id="in-area" class="in"><option value="">Elija el área…</option>${areas.map(a => `<option ${a.nombre === F.area ? "selected" : ""}>${esc(a.nombre)}</option>`).join("")}</select>
     ${areas.length ? "" : `<p class="s">Cargando áreas…</p>`}
     <p class="s">Fecha y hora: ${esc(F.t0)} · Inspector: ${esc(SES ? SES.nombre : "")}</p></div>`;
   const secB = `<div class="in-card"><h3>B. Puntos de segregación</h3><p class="s">Un punto es un grupo de contenedores. Marque C (conforme), NC o N/A. Todo viene conforme: toque solo lo que no esté bien.</p>` +
-    F.puntos.map((pt, i) => `<div class="in-pt"><div style="display:flex;gap:6px"><input data-in-pn="${i}" value="${esc(pt.nombre)}" maxlength="40" style="flex:1"><button type="button" class="btn sec sm" data-in-pq="${i}">Quitar</button></div>` +
+    F.puntos.map((pt, i) => `<div class="in-pt"><div style="display:flex;gap:6px"><input class="in" data-in-pn="${i}" value="${esc(pt.nombre)}" maxlength="40" style="flex:1;width:auto;min-width:0"><button type="button" class="btn sec sm" data-in-pq="${i}">Quitar</button></div>` +
       COLS.map(([k, t]) => `<div class="c"><span>${t}</span>${sgCell(i, k, pt.c[k])}</div>`).join("") + `</div>`).join("") +
     (F.puntos.length < MAX_PUNTOS ? `<button type="button" class="btn sec sm" data-in="punto">＋ Agregar punto</button>` : "") + `</div>`;
   const secC = `<div class="in-card"><h3>C. Criterios</h3>` + BLOQUES.map(([nom, ns], bi) =>
@@ -157,18 +165,18 @@ function pintaForm(){
       const c = F.crit[n], r = resultadoCrit(F, n), auto = n === 1;
       return `<div class="in-crit"><div class="t"><span class="n">${n}.</span> ${esc(CRIT[n])}</div>` +
         (auto ? `<span class="hz-b ${r === "C" ? "cer" : r === "NC" ? "venc" : "abi"}">${r === "NA" ? "N/A" : r} (automático)</span>` : `<span class="in-sg">${RESP.map(([k]) => `<button type="button" data-in-r="${n}|${k}" class="${k}${c.r === k ? " on" : ""}">${k === "NA" ? "N/A" : k}</button>`).join("")}</span>`) +
-        (r === "NC" ? `<div class="in-nc"><textarea data-in-o="${n}" maxlength="300" placeholder="¿Qué se observó? (mínimo 5 letras)">${esc(c.obs)}</textarea>
+        (r === "NC" ? `<div class="in-nc"><textarea class="in" data-in-o="${n}" maxlength="300" placeholder="¿Qué se observó? (mínimo 5 letras)">${esc(c.obs)}</textarea>
           <div class="hz-thumbs">${c.fotos.map((f, fi) => `<div class="hz-thumb"><img src="${f}" alt=""><button type="button" data-in-fq="${n}|${fi}">✕</button></div>`).join("")}</div>
           ${c.fotos.length < MAX_FOTOS ? `<label class="btn sec sm" style="display:inline-block">📷 Foto con la marca<input type="file" accept="image/*" capture="environment" data-in-f="${n}" hidden></label>` : ""}</div>` : "") + `</div>`;
     }).join("") + `<label class="in-ok"><input type="checkbox" data-in-b="${bi}" ${F.bloques[bi] ? "checked" : ""}> Revisé este bloque</label>`).join("") + `</div>`;
   const secD = `<div class="in-card"><h3>Resultado y responsable</h3>
     <div class="in-res ${claseCal(cal)}"><b>${p === null ? "s/d" : p + " %"}</b> ${esc(cal || "Sin criterios aplicables")}<div class="s">Conformidad = conformes ÷ (conformes + no conformes). Los N/A no cuentan. Cortes provisionales: ≥ ${CORTES.sat} % satisfactorio, ${CORTES.ace}–${CORTES.sat - 0.1} % aceptable con acciones, menor a ${CORTES.ace} % no satisfactorio.</div></div>
-    <label>Responsable del área (nombre)</label><input id="in-rn" maxlength="60" value="${esc(F.respNombre)}">
-    <label>Cargo</label><input id="in-rc" maxlength="40" value="${esc(F.respCargo)}">
-    <label>Cargo del inspector</label><input id="in-ic" maxlength="40" value="${esc(F.inspCargo)}">
-    <label style="margin-top:10px">Firma del inspector (${esc(SES ? SES.nombre : "")})</label>
+    <label class="f" for="in-rn">Responsable del área (nombre y apellidos)</label><input id="in-rn" class="in" autocomplete="off" maxlength="60" value="${esc(F.respNombre)}">
+    <label class="f" for="in-rc">Cargo del responsable del área</label><input id="in-rc" class="in" autocomplete="off" maxlength="40" value="${esc(F.respCargo)}">
+    <label class="f" for="in-ic">Cargo del inspector</label><input id="in-ic" class="in" autocomplete="off" maxlength="40" value="${esc(F.inspCargo)}">
+    <label class="f">Firma del inspector (${esc(SES ? SES.nombre : "")})</label>
     <canvas class="in-fp" data-in-fc="insp"></canvas><div class="in-fb"><span>Firme con el dedo</span><button type="button" class="btn sec sm" data-in-fl="insp">Borrar firma</button></div>
-    <label>Firma del responsable del área</label>
+    <label class="f">Firma del responsable del área</label>
     <canvas class="in-fp" data-in-fc="resp"></canvas><div class="in-fb"><span>El responsable firma aquí</span><button type="button" class="btn sec sm" data-in-fl="resp">Borrar firma</button></div>
     <div class="err" id="in-err">${esc(S.err)}</div>
     <div class="in-top"><button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Enviando…" : "Guardar inspección"}</button><button class="btn sec" data-in="salir">Guardar borrador y salir</button></div></div>`;
