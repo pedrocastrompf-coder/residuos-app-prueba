@@ -42,6 +42,9 @@ const S = {falta:"", vista:"lista", lista:null, t:0, cargando:false, areas:null,
 const st = document.createElement("style");
 st.textContent = `
 .in-top{display:flex;gap:8px;margin:8px 0}
+.in-g{display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px;margin-top:2px}
+.in-ro{border:1px solid var(--line);background:#faf7f3;border-radius:10px;padding:11px 12px;font-size:15px;color:var(--brown)}
+@media(max-width:560px){.in-g{grid-template-columns:1fr 1fr}.in-g-w{grid-column:1/-1}}
 .in-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0}
 .in-card h3{margin:0 0 6px;font-size:15px;color:var(--brown)}
 .in-card .s{font-size:12.5px;color:var(--gray);margin:0 0 8px}
@@ -157,7 +160,7 @@ function pintaForm(){
   const secA = `<div class="in-card"><h3>A. Datos de la inspección</h3>
     <label class="f" for="in-area">Área</label><select id="in-area" class="in"><option value="">Elija el área…</option>${areas.map(a => `<option ${a.nombre === F.area ? "selected" : ""}>${esc(a.nombre)}</option>`).join("")}</select>
     ${areas.length ? "" : `<p class="s">Cargando áreas…</p>`}
-    <p class="s">Fecha y hora: ${esc(F.t0)} · Inspector: ${esc(SES ? SES.nombre : "")}</p></div>`;
+    <div class="in-g"><div><label class="f">Fecha</label><div class="in-ro">${esc(fecha(F.t0.slice(0,10)))}</div></div><div><label class="f">Hora</label><div class="in-ro">${esc(F.t0.slice(11,16))}</div></div><div class="in-g-w"><label class="f">Inspector</label><div class="in-ro">${esc(SES ? SES.nombre : "")}</div></div></div></div>`;
   const secB = `<div class="in-card"><h3>B. Puntos de segregación</h3><p class="s">Un punto es un grupo de contenedores. Marque cada casilla: C (conforme), NC (no conforme) o N/A (no aplica).</p>` +
     F.puntos.map((pt, i) => `<div class="in-pt"><div style="display:flex;gap:6px"><input class="in" data-in-pn="${i}" value="${esc(pt.nombre)}" maxlength="40" style="flex:1;width:auto;min-width:0"><button type="button" class="btn sec sm" data-in-pq="${i}">Quitar</button></div>` +
       COLS.map(([k, t]) => `<div class="c"><span>${t}</span>${sgCell(i, k, pt.c[k])}</div>`).join("") + `</div>`).join("") +
