@@ -10,7 +10,7 @@ const INSP_COLS = ["id","sede","creado","fecha","hora","area","inspectorUsuario"
 const INSP_CORTES = {satisfactorio:90, aceptable:70};   // PROVISIONAL: porcentajes de corte por confirmar con Medio Ambiente
 const INSP_TIPOS_CELDA = ["noaprov","organico","papel","plastico","vidrio","metal","peligroso","mermas","rotulacion","delimitacion"];
 const INSP_RES = ["C","NC","NA"];
-const INSP_MAX_PUNTOS = 8, INSP_MAX_FOTOS = 3;
+const INSP_MAX_PUNTOS = 8;
 // n → [texto del criterio (formato Vs 06), tipo de hallazgo que se crea si es NC]
 const INSP_CRIT = {
   1:["Segregación, rotulación y delimitación conformes en todos los puntos (ver Sección A)","Segregación de residuos"],
@@ -97,7 +97,7 @@ function inspGuardar_(b, u){
   if (!ar || !ar.activo) return {ok:false, error:"area_invalida"};
   const ahora = hzAhora_(), ids = [];
   v.hallazgos.forEach(h => {                                                       // cada NC pasa a la lista única de hallazgos
-    const r = hzCrear_({id:h.id, area:h.area, descripcion:h.descripcion, tipo:h.tipo, riesgo:h.riesgo, fotos:b.criterios.filter(x => "c" + x.n === h.id.split("-").pop())[0].fotos}, u);
+    const r = hzCrear_({id:h.id, area:h.area, descripcion:h.descripcion, tipo:h.tipo, riesgo:h.riesgo, fotos:h.fotos}, u);
     if (r && r.ok){
       const fila = hzBuscar_(hzHoja_(), h.id);
       if (fila){ fila.origen = "inspección " + v.id; hzEscribir_(hzHoja_(), fila); }
@@ -115,7 +115,7 @@ function inspListar_(u){
   u = hzU_(u);
   const todas = u.rol === "Inspector" || u.rol === "Administrador";
   const F = sh => { const n = sh.getLastRow(); return n < 2 ? [] : sh.getRange(2, 1, n - 1, INSP_COLS.length).getValues(); };
-  const L = F(inspHoja_()).filter(r => todas || String(r[6]) === u.usuario).map(r => {
+  const L = F(inspHoja_()).filter(r => String(r[1]) === SEDE && (todas || String(r[6]) === u.usuario)).map(r => {
     const o = {}; INSP_COLS.forEach((c, j) => o[c] = String(r[j] == null ? "" : r[j])); return o;
   }).reverse().slice(0, 100);
   const out = L.map(o => ({id:o.id, creado:o.creado, fecha:o.fecha, hora:o.hora, area:o.area, inspectorNombre:o.inspectorNombre,
