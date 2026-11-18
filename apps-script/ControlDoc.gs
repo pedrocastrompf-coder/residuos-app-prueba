@@ -1,0 +1,321 @@
+/**
+ * Control documentario · módulo del backend (Google Apps Script)
+ * Pega este archivo como un archivo NUEVO («ControlDoc») en Extensiones > Apps Script, junto a Code.gs, Hallazgos.gs e Inspecciones.gs.
+ * Usa de Code.gs: hoja_, bitacora_. Usa de Hallazgos.gs: hzTxt_, hzAhora_, hzHoy_, hzDataUrl_, hzSub_, hzU_, HZ_TIPOS.
+ *
+ * Un documento (por ejemplo SGA.R.G.002) tiene versiones: Borrador → Vigente → Obsoleta.
+ * El formato de cada versión es una «definición» (JSON) que la app usa para armar el formulario y el PDF.
+ * Los registros llenados (cada inspección) NO se guardan como archivo: solo como datos.
+ * En Drive solo se guarda el PDF en blanco de la versión vigente y de la anterior.
+ */
+
+// ===================== 1. REGLAS =====================
+const DOC_COLS = ["codigo","titulo","tipo","version","versionId","fechaAprobacion","responsable","creado"];
+const VER_COLS = ["versionId","codigo","version","estado","definicion","editor","editorNombre","creado","actualizado","aprobador","aprobadorNombre","aprobado","fechaAprobacion","motivo","pdf"];
+const CC_COLS  = ["fecha","codigo","version","accion","usuario","nombre","motivo","detalle"];
+const DOC_TIPOS = ["Formato","Procedimiento","Instructivo"];
+const DOC_RAIZ = "Control documentario";
+const DOC_INSPECCION = "SGA.R.G.002";
+const DOC_MAX_DEF = 45000;   // caracteres de una definición (celda de Sheets: 50 000)
+
+// Valida y normaliza una definición de formato. Devuelve {ok, def} o {ok:false, error, campo}.
+function docValidarDef_(d){
+  d = d || {};
+  const T = (v, a, b) => { const s = hzTxt_(v); return s.length >= a && s.length <= b ? s : null; };
+  const out = {};
+  out.titulo = T(d.titulo, 3, 80); if (out.titulo === null) return {ok:false, error:"def_invalida", campo:"Título del formato (3 a 80 caracteres)"};
+  // tabla de puntos (filas agregables): opcional
+  if (d.puntos){
+    const p = d.puntos, cols = Array.isArray(p.columnas) ? p.columnas : [], ks = {};
+    const titulo = T(p.titulo, 3, 60); if (titulo === null) return {ok:false, error:"def_invalida", campo:"Título de la tabla de puntos"};
+    const max = Math.floor(Number(p.max)); if (!(max >= 1 && max <= 12)) return {ok:false, error:"def_invalida", campo:"Máximo de puntos (1 a 12)"};
+    if (cols.length < 1 || cols.length > 14) return {ok:false, error:"def_invalida", campo:"Columnas de la tabla de puntos (1 a 14)"};
+    const C = [];
+    for (let i = 0; i < cols.length; i++){
+      const c = cols[i] || {}, k = String(c.k || ""), t = T(c.t, 2, 30), color = String(c.color || "");
+      if (!/^[a-z0-9]{2,16}$/.test(k) || ks[k]) return {ok:false, error:"def_invalida", campo:"Columna " + (i + 1) + " de la tabla de puntos (clave)"};
+      if (t === null) return {ok:false, error:"def_invalida", campo:"Nombre de la columna " + (i + 1) + " de la tabla de puntos (2 a 30 caracteres)"};
+      if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) return {ok:false, error:"def_invalida", campo:"Color de la columna «" + t + "»"};
+      ks[k] = 1; C.push({k:k, t:t, color:color});
+    }
+    out.puntos = {titulo:titulo, nota:hzTxt_(p.nota).slice(0, 150), max:max, columnas:C};
+  } else out.puntos = null;
+  // criterios en grupos; se numeran 1..N en el orden en que aparecen
+  const G = d.criterios && Array.isArray(d.criterios.grupos) ? d.criterios.grupos : [];
+  if (G.length < 1 || G.length > 8) return {ok:false, error:"def_invalida", campo:"Grupos de criterios (1 a 8)"};
+  let n = 0, autos = 0; const grupos = [];
+  for (let g = 0; g < G.length; g++){
+    const nombre = T(G[g] && G[g].nombre, 3, 50); if (nombre === null) return {ok:false, error:"def_invalida", campo:"Nombre del grupo " + (g + 1) + " (3 a 50 caracteres)"};
+    const I = Array.isArray(G[g].items) ? G[g].items : [];
+    if (I.length < 1 || I.length > 20) return {ok:false, error:"def_invalida", campo:"Criterios del grupo «" + nombre + "» (1 a 20)"};
+    const items = [];
+    for (let i = 0; i < I.length; i++){
+      const it = I[i] || {}, t = T(it.t, 3, 200);
+      if (t === null) return {ok:false, error:"def_invalida", campo:"Texto de un criterio del grupo «" + nombre + "» (3 a 200 caracteres)"};
+      const h = HZ_TIPOS.indexOf(it.h) >= 0 ? it.h : "Otro";
+      const auto = it.auto === "puntos" && out.puntos ? "puntos" : "";
+      if (auto) autos++;
+      items.push({n:++n, t:t, h:h, auto:auto});
+    }
+    grupos.push({nombre:nombre, items:items});
+  }
+  if (n > 40) return {ok:false, error:"def_invalida", campo:"Total de criterios (máximo 40)"};
+  if (autos > 1) return {ok:false, error:"def_invalida", campo:"Solo un criterio puede calcularse desde la tabla de puntos"};
+  out.criterios = {grupos:grupos};
+  // resultado: porcentaje de cumplimiento o texto
+  const R = d.resultado || {};
+  if (R.modo === "texto"){
+    const titulo = T(R.titulo, 3, 60); if (titulo === null) return {ok:false, error:"def_invalida", campo:"Título del resultado"};
+    out.resultado = {modo:"texto", titulo:titulo};
+  } else {
+    const sat = Number(R.cortes && R.cortes.sat), ace = Number(R.cortes && R.cortes.ace);
+    if (!(sat > 0 && sat <= 100 && ace > 0 && ace < sat)) return {ok:false, error:"def_invalida", campo:"Cortes del resultado (aceptable menor que satisfactorio, hasta 100 %)"};
+    out.resultado = {modo:"porcentaje", cortes:{sat:sat, ace:ace}};
+  }
+  // firmas (dos firmantes)
+  const F = d.firmas || {};
+  const fi = T(F.insp, 3, 60), fr = T(F.resp, 3, 60);
+  if (fi === null || fr === null) return {ok:false, error:"def_invalida", campo:"Títulos de las firmas (3 a 60 caracteres)"};
+  out.firmas = {insp:fi, resp:fr};
+  if (JSON.stringify(out).length > DOC_MAX_DEF) return {ok:false, error:"def_invalida", campo:"El formato es demasiado grande"};
+  return {ok:true, def:out};
+}
+
+// Resumen automático de qué cambió entre dos definiciones (para el control de cambios)
+function docResumenCambios_(a, b){
+  if (!a) return "Primera versión.";
+  const R = [];
+  if (a.titulo !== b.titulo) R.push("Título: «" + a.titulo + "» → «" + b.titulo + "»");
+  const txt = d => { const L = []; d.criterios.grupos.forEach(g => g.items.forEach(i => L.push(i.t))); return L; };
+  const ta = txt(a), tb = txt(b);
+  const quit = ta.filter(t => tb.indexOf(t) < 0), agr = tb.filter(t => ta.indexOf(t) < 0);
+  if (ta.length !== tb.length) R.push("Criterios: " + ta.length + " → " + tb.length);
+  if (quit.length) R.push("Criterios retirados o modificados: " + quit.length);
+  if (agr.length) R.push("Criterios nuevos o modificados: " + agr.length);
+  const ga = a.criterios.grupos.map(g => g.nombre).join(" | "), gb = b.criterios.grupos.map(g => g.nombre).join(" | ");
+  if (ga !== gb) R.push("Grupos: " + gb);
+  const tip = d => { const L = []; d.criterios.grupos.forEach(g => g.items.forEach(i => L.push(i.t + "→" + i.h))); return L.join("|"); };
+  if (!agr.length && !quit.length && tip(a) !== tip(b)) R.push("Tipo de hallazgo de algún criterio");
+  const pa = a.puntos, pb = b.puntos;
+  if (!!pa !== !!pb) R.push(pb ? "Se agrega la tabla de puntos" : "Se quita la tabla de puntos");
+  else if (pa && pb){
+    if (pa.titulo !== pb.titulo || pa.nota !== pb.nota) R.push("Título o nota de la tabla de puntos");
+    if (pa.max !== pb.max) R.push("Máximo de puntos: " + pa.max + " → " + pb.max);
+    const ca = pa.columnas.map(c => c.t + c.color).join("|"), cb = pb.columnas.map(c => c.t + c.color).join("|");
+    if (ca !== cb) R.push("Columnas de la tabla de puntos: " + pb.columnas.map(c => c.t).join(", "));
+  }
+  const ra = a.resultado, rb = b.resultado;
+  if (ra.modo !== rb.modo) R.push("Resultado: " + (rb.modo === "texto" ? "texto" : "porcentaje"));
+  else if (rb.modo === "porcentaje" && (ra.cortes.sat !== rb.cortes.sat || ra.cortes.ace !== rb.cortes.ace)) R.push("Cortes: " + ra.cortes.sat + "/" + ra.cortes.ace + " → " + rb.cortes.sat + "/" + rb.cortes.ace);
+  else if (rb.modo === "texto" && ra.titulo !== rb.titulo) R.push("Título del resultado");
+  if (a.firmas.insp !== b.firmas.insp || a.firmas.resp !== b.firmas.resp) R.push("Títulos de las firmas");
+  return (R.length ? R.join(" · ") : "Sin cambios de contenido.").slice(0, 900);
+}
+
+function docSigVersion_(L){
+  let m = 0; L.forEach(v => { const x = parseInt(v.version, 10); if (x > m) m = x; });
+  return ("0" + (m + 1)).slice(-2);
+}
+
+// ===================== 2. PERSISTENCIA =====================
+function docHoja_(){ return hoja_("Documentos", DOC_COLS, DOC_COLS); }
+function verHoja_(){ return hoja_("Versiones", VER_COLS, VER_COLS); }
+function ccHoja_(){ return hoja_("ControlCambios", CC_COLS, CC_COLS); }
+
+function docFilas_(sh, cols){
+  const n = sh.getLastRow(); if (n < 2) return [];
+  return sh.getRange(2, 1, n - 1, cols.length).getValues().map((r, i) => {
+    const o = {_fila:i + 2}; cols.forEach((c, j) => o[c] = String(r[j] == null ? "" : r[j])); return o;
+  });
+}
+function docEscribir_(sh, cols, o){ sh.getRange(o._fila, 1, 1, cols.length).setValues([cols.map(c => o[c] == null ? "" : o[c])]); }
+function docCambio_(codigo, version, accion, u, motivo, detalle){
+  ccHoja_().appendRow([hzAhora_(), codigo, version, accion, u.usuario, u.nombre, String(motivo || "").slice(0, 500), String(detalle || "").slice(0, 900)]);
+}
+function docMeta_(v){
+  return {versionId:v.versionId, codigo:v.codigo, version:v.version, estado:v.estado, editorNombre:v.editorNombre, creado:v.creado, actualizado:v.actualizado,
+    aprobadorNombre:v.aprobadorNombre, aprobado:v.aprobado, fechaAprobacion:v.fechaAprobacion, motivo:v.motivo, tienePdf:!!v.pdf};
+}
+
+// La primera vez: crea el documento del formato de inspección con su versión 06 (vigente) y la 07 (borrador por aprobar)
+function docSembrar_(){
+  const sh = docHoja_(); if (sh.getLastRow() >= 2) return;
+  const sis = {usuario:"sistema", nombre:"Carga inicial"}, ahora = hzAhora_();
+  const v06 = docValidarDef_(DOC_DEF_06).def, v07 = docValidarDef_(DOC_DEF_07).def;
+  const id06 = "v-" + Utilities.getUuid().slice(0, 8), id07 = "v-" + Utilities.getUuid().slice(0, 8);
+  sh.appendRow([DOC_INSPECCION, "Inspección ambiental de área de trabajo", "Formato", "06", id06, "", "Medio Ambiente", ahora]);
+  verHoja_().appendRow([id06, DOC_INSPECCION, "06", "Vigente", JSON.stringify(v06), sis.usuario, sis.nombre, ahora, ahora, "", "", "", "", "Formato vigente en papel (carga inicial).", ""]);
+  verHoja_().appendRow([id07, DOC_INSPECCION, "07", "Borrador", JSON.stringify(v07), sis.usuario, sis.nombre, ahora, ahora, "", "", "", "",
+    "Se reduce a 9 criterios (se retiran efluentes, toma de conciencia y «Otro», y se unifican criterios redundantes). Se elimina la sección F (custodia del registro) porque no se firma desde la app.", ""]);
+  docCambio_(DOC_INSPECCION, "06", "Carga inicial", sis, "Formato vigente en papel.", "Versión 06 cargada como vigente.");
+  docCambio_(DOC_INSPECCION, "07", "Borrador creado", sis, "Propuesta de reducción de criterios.", docResumenCambios_(v06, v07));
+}
+
+function docVersionPorId_(id){ return docFilas_(verHoja_(), VER_COLS).filter(v => v.versionId === String(id))[0] || null; }
+// definición de una versión (para inspecciones); null si no existe o es un borrador
+function docDefAprobada_(id){
+  const v = docVersionPorId_(id); if (!v || v.estado === "Borrador") return null;
+  try{ return {def:JSON.parse(v.definicion), version:v.version, codigo:v.codigo, versionId:v.versionId}; }catch(e){ return null; }
+}
+function docVigenteDe_(codigo){
+  const d = docFilas_(docHoja_(), DOC_COLS).filter(x => x.codigo === codigo)[0]; if (!d) return null;
+  const v = docVersionPorId_(d.versionId); if (!v) return null;
+  return {codigo:d.codigo, titulo:d.titulo, version:v.version, versionId:v.versionId, fechaAprobacion:v.fechaAprobacion, def:JSON.parse(v.definicion)};
+}
+
+// ===================== 3. ACCIONES =====================
+function docListar_(u){
+  docSembrar_();
+  const V = docFilas_(verHoja_(), VER_COLS);
+  return {ok:true, documentos:docFilas_(docHoja_(), DOC_COLS).map(d => {
+    const b = V.filter(v => v.codigo === d.codigo && v.estado === "Borrador")[0];
+    return {codigo:d.codigo, titulo:d.titulo, tipo:d.tipo, version:d.version, versionId:d.versionId, fechaAprobacion:d.fechaAprobacion, responsable:d.responsable,
+      borrador:b ? {versionId:b.versionId, version:b.version} : null};
+  })};
+}
+
+function docDetalle_(b, u){
+  docSembrar_();
+  const codigo = String(b.codigo || "");
+  const d = docFilas_(docHoja_(), DOC_COLS).filter(x => x.codigo === codigo)[0]; if (!d) return {ok:false, error:"no_existe"};
+  const versiones = docFilas_(verHoja_(), VER_COLS).filter(v => v.codigo === codigo).map(docMeta_).reverse();
+  const cambios = docFilas_(ccHoja_(), CC_COLS).filter(c => c.codigo === codigo).reverse().slice(0, 200)
+    .map(c => ({fecha:c.fecha, version:c.version, accion:c.accion, nombre:c.nombre, motivo:c.motivo, detalle:c.detalle}));
+  return {ok:true, documento:{codigo:d.codigo, titulo:d.titulo, tipo:d.tipo, version:d.version, versionId:d.versionId, fechaAprobacion:d.fechaAprobacion, responsable:d.responsable}, versiones:versiones, cambios:cambios};
+}
+
+function docVersion_(b, u){
+  const v = docVersionPorId_(b.versionId); if (!v) return {ok:false, error:"no_existe"};
+  const d = docFilas_(docHoja_(), DOC_COLS).filter(x => x.codigo === v.codigo)[0];
+  return {ok:true, version:Object.assign(docMeta_(v), {titulo:d ? d.titulo : "", definicion:JSON.parse(v.definicion)})};
+}
+
+function docVigente_(b, u){
+  docSembrar_();
+  const x = docVigenteDe_(String(b.codigo || DOC_INSPECCION)); if (!x) return {ok:false, error:"no_existe"};
+  return {ok:true, codigo:x.codigo, titulo:x.titulo, version:x.version, versionId:x.versionId, fechaAprobacion:x.fechaAprobacion, definicion:x.def};
+}
+
+// Crea o actualiza el borrador del documento (uno por documento)
+function docBorradorGuardar_(b, u){
+  u = hzU_(u); docSembrar_();
+  const codigo = String(b.codigo || "");
+  const d = docFilas_(docHoja_(), DOC_COLS).filter(x => x.codigo === codigo)[0]; if (!d) return {ok:false, error:"no_existe"};
+  const motivo = hzTxt_(b.motivo); if (motivo.length < 5 || motivo.length > 500) return {ok:false, error:"motivo_invalido"};
+  const val = docValidarDef_(b.definicion); if (!val.ok) return val;
+  const sh = verHoja_(), V = docFilas_(sh, VER_COLS).filter(v => v.codigo === codigo), ahora = hzAhora_();
+  let br = V.filter(v => v.estado === "Borrador")[0];
+  if (br){
+    br.definicion = JSON.stringify(val.def); br.motivo = motivo; br.actualizado = ahora; br.editor = u.usuario; br.editorNombre = u.nombre;
+    docEscribir_(sh, VER_COLS, br);
+  } else {
+    br = {versionId:"v-" + Utilities.getUuid().slice(0, 8), codigo:codigo, version:docSigVersion_(V), estado:"Borrador", definicion:JSON.stringify(val.def),
+      editor:u.usuario, editorNombre:u.nombre, creado:ahora, actualizado:ahora, aprobador:"", aprobadorNombre:"", aprobado:"", fechaAprobacion:"", motivo:motivo, pdf:""};
+    sh.appendRow(VER_COLS.map(c => br[c]));
+  }
+  const vig = docVersionPorId_(d.versionId);
+  docCambio_(codigo, br.version, "Borrador guardado", u, motivo, docResumenCambios_(vig ? JSON.parse(vig.definicion) : null, val.def));
+  bitacora_(u, "Documento: borrador guardado", codigo + " v" + br.version);
+  return {ok:true, versionId:br.versionId, version:br.version};
+}
+
+function docBorradorDescartar_(b, u){
+  u = hzU_(u);
+  const sh = verHoja_(), v = docFilas_(sh, VER_COLS).filter(x => x.versionId === String(b.versionId))[0];
+  if (!v) return {ok:false, error:"no_existe"};
+  if (v.estado !== "Borrador") return {ok:false, error:"estado_invalido"};
+  sh.deleteRow(v._fila);
+  docCambio_(v.codigo, v.version, "Borrador descartado", u, "", "");
+  bitacora_(u, "Documento: borrador descartado", v.codigo + " v" + v.version);
+  return {ok:true};
+}
+
+// Aprueba el borrador: pasa a Vigente; la vigente anterior queda Obsoleta (no se borra)
+function docAprobar_(b, u){
+  u = hzU_(u);
+  const sh = verHoja_(), V = docFilas_(sh, VER_COLS), v = V.filter(x => x.versionId === String(b.versionId))[0];
+  if (!v) return {ok:false, error:"no_existe"};
+  if (v.estado !== "Borrador") return {ok:false, error:"estado_invalido"};
+  const dsh = docHoja_(), d = docFilas_(dsh, DOC_COLS).filter(x => x.codigo === v.codigo)[0]; if (!d) return {ok:false, error:"no_existe"};
+  const ahora = hzAhora_(), hoy = hzHoy_();
+  const ant = V.filter(x => x.versionId === d.versionId)[0];
+  if (ant){ ant.estado = "Obsoleta"; ant.actualizado = ahora; docEscribir_(sh, VER_COLS, ant); }
+  v.estado = "Vigente"; v.aprobador = u.usuario; v.aprobadorNombre = u.nombre; v.aprobado = ahora; v.fechaAprobacion = hoy; v.actualizado = ahora;
+  docEscribir_(sh, VER_COLS, v);
+  d.version = v.version; d.versionId = v.versionId; d.fechaAprobacion = hoy; docEscribir_(dsh, DOC_COLS, d);
+  docCambio_(v.codigo, v.version, "Aprobada (vigente)", u, v.motivo,
+    docResumenCambios_(ant ? JSON.parse(ant.definicion) : null, JSON.parse(v.definicion)) + (ant ? " · La versión " + ant.version + " queda obsoleta." : ""));
+  bitacora_(u, "Documento aprobado", v.codigo + " v" + v.version);
+  return {ok:true, versionId:v.versionId, version:v.version, fechaAprobacion:hoy};
+}
+
+// Guarda en Drive el PDF en blanco de la versión vigente; conserva solo el de la vigente y el de la anterior
+function docPdfGuardar_(b, u){
+  u = hzU_(u);
+  const sh = verHoja_(), V = docFilas_(sh, VER_COLS), v = V.filter(x => x.versionId === String(b.versionId))[0];
+  if (!v) return {ok:false, error:"no_existe"};
+  if (v.estado !== "Vigente") return {ok:false, error:"estado_invalido"};
+  const p = hzDataUrl_(b.pdf); if (!p || p.mime !== "application/pdf") return {ok:false, error:"pdf_invalido"};
+  const carpeta = hzSub_(hzSub_(DriveApp.getRootFolder(), DOC_RAIZ), v.codigo);
+  const f = carpeta.createFile(Utilities.newBlob(Utilities.base64Decode(p.b64), "application/pdf", v.codigo + " v" + v.version + ".pdf"));
+  if (v.pdf){ try{ DriveApp.getFileById(v.pdf).setTrashed(true); }catch(e){} }
+  v.pdf = f.getId(); docEscribir_(sh, VER_COLS, v);
+  // la anterior = la obsoleta aprobada más reciente; las demás pierden su PDF (sus datos se conservan)
+  const obs = V.filter(x => x.codigo === v.codigo && x.estado === "Obsoleta").sort((a, c) => a.aprobado < c.aprobado ? 1 : -1);
+  obs.slice(1).forEach(x => { if (x.pdf){ try{ DriveApp.getFileById(x.pdf).setTrashed(true); }catch(e){} x.pdf = ""; docEscribir_(sh, VER_COLS, x); } });
+  docCambio_(v.codigo, v.version, "PDF guardado en Drive", u, "", DOC_RAIZ + "/" + v.codigo);
+  return {ok:true};
+}
+
+function docPdf_(b, u){
+  const v = docVersionPorId_(b.versionId); if (!v || !v.pdf) return {ok:false, error:"no_existe"};
+  const f = DriveApp.getFileById(v.pdf);
+  return {ok:true, nombre:f.getName(), dataUrl:"data:application/pdf;base64," + Utilities.base64Encode(f.getBlob().getBytes())};
+}
+
+// ===================== 4. FORMATO INICIAL (SGA.R.G.002) =====================
+const DOC_PUNTOS_INSPECCION = {titulo:"Segregación de residuos por punto", nota:"NTP 900.058:2019 · C = Conforme | NC = No conforme | NA = No aplica", max:8, columnas:[
+  {k:"noaprov", t:"No aprovechable", color:"#1f1f1f"}, {k:"organico", t:"Orgánico", color:"#8b5a2b"}, {k:"papel", t:"Papel y cartón", color:"#1f5fbf"},
+  {k:"plastico", t:"Plástico", color:"#ffffff"}, {k:"vidrio", t:"Vidrio", color:"#2e8b3d"}, {k:"metal", t:"Metal", color:"#f2c200"},
+  {k:"peligroso", t:"Peligrosos", color:"#d32f2f"}, {k:"mermas", t:"Mermas", color:""}, {k:"rotulacion", t:"Rotulación", color:""}, {k:"delimitacion", t:"Delimitación", color:""}]};
+const DOC_FIRMAS_INSPECCION = {insp:"Responsable de Medio Ambiente (inspector)", resp:"Responsable del área inspeccionada"};
+const DOC_DEF_06 = {titulo:"Inspección ambiental de área de trabajo", puntos:DOC_PUNTOS_INSPECCION, criterios:{grupos:[
+  {nombre:"Residuos sólidos y acopio", items:[
+    {t:"Segregación, rotulación y delimitación conformes en todos los puntos (se calcula de la tabla de puntos)", h:"Segregación de residuos", auto:"puntos"},
+    {t:"Contenedores en buen estado, con bolsa y letrero de colores NTP 900.058", h:"Almacenamiento y acopio"},
+    {t:"Sin sobrellenado ni residuos fuera del contenedor; punto limpio y ordenado", h:"Almacenamiento y acopio"},
+    {t:"Envolturas laminadas / metalizadas segregadas según instructivo", h:"Segregación de residuos"},
+    {t:"Mermas y subproductos separados, identificados y con destino registrado", h:"Segregación de residuos"},
+    {t:"Acopio temporal en condiciones (techo, piso, señalización, contención)", h:"Almacenamiento y acopio"}]},
+  {nombre:"Peligrosos y químicos", items:[
+    {t:"Residuos peligrosos y RAEE en recipiente cerrado y rotulado", h:"Almacenamiento y acopio"},
+    {t:"Químicos almacenados según FDS, con bandeja antiderrame y rótulo", h:"Almacenamiento y acopio"},
+    {t:"Kit antiderrames completo y accesible", h:"Derrames y fugas"}]},
+  {nombre:"Efluentes y emisiones", items:[
+    {t:"Trampas de grasa operativas", h:"Efluentes y desagües"},
+    {t:"Efluentes de lavado CIP neutralizados antes de descargar", h:"Efluentes y desagües"},
+    {t:"Sin humo, olores, polvo ni fugas de refrigerante anormales", h:"Otro"}]},
+  {nombre:"Energía, agua e inocuidad", items:[
+    {t:"Sin fugas de agua, vapor, aire o gas; equipos apagados si no se usan", h:"Uso de agua y energía"},
+    {t:"Flujómetros operativos", h:"Uso de agua y energía"},
+    {t:"Residuos en zona de proceso sin riesgo de plagas ni contaminación cruzada", h:"Orden y limpieza"}]},
+  {nombre:"Toma de conciencia", items:[
+    {t:"Personal conoce aspectos ambientales, colores y respuesta a derrames", h:"Otro"},
+    {t:"Otro", h:"Otro"}]}]},
+  resultado:{modo:"porcentaje", cortes:{sat:90, ace:70}}, firmas:DOC_FIRMAS_INSPECCION};
+const DOC_DEF_07 = {titulo:"Inspección ambiental de área de trabajo", puntos:DOC_PUNTOS_INSPECCION, criterios:{grupos:[
+  {nombre:"Residuos sólidos y acopio", items:[
+    {t:"Segregación, rotulación y delimitación conformes en todos los puntos (se calcula de la tabla de puntos)", h:"Segregación de residuos", auto:"puntos"},
+    {t:"Contenedores en buen estado y con bolsa", h:"Almacenamiento y acopio"},
+    {t:"Sin sobrellenado ni residuos fuera del contenedor; zona limpia, sin riesgo de plagas ni contaminación cruzada", h:"Orden y limpieza"},
+    {t:"Mermas, subproductos y envolturas laminadas segregados, con destino registrado", h:"Segregación de residuos"},
+    {t:"Acopio temporal en condiciones (techo, piso, señalización, contención)", h:"Almacenamiento y acopio"}]},
+  {nombre:"Peligrosos y químicos", items:[
+    {t:"Residuos peligrosos y RAEE en recipiente cerrado y rotulado", h:"Almacenamiento y acopio"},
+    {t:"Químicos con FDS y bandeja antiderrame; kit antiderrames completo y accesible", h:"Almacenamiento y acopio"}]},
+  {nombre:"Emisiones, agua y energía", items:[
+    {t:"Sin humo, olores, polvo ni fugas de refrigerante anormales", h:"Otro"},
+    {t:"Sin fugas de agua, vapor, aire o gas; equipos apagados si no se usan; flujómetros operativos", h:"Uso de agua y energía"}]}]},
+  resultado:{modo:"porcentaje", cortes:{sat:90, ace:70}}, firmas:DOC_FIRMAS_INSPECCION};
+
+if (typeof module !== "undefined") module.exports = {docValidarDef_, docResumenCambios_, docSigVersion_, DOC_DEF_06, DOC_DEF_07};

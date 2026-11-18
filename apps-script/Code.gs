@@ -189,7 +189,9 @@ const PERMISOS = {
   // hallazgos ambientales (el rol «Responsable de área» no pesa ni despacha: solo tiene estos permisos)
   hallazgo_reportar:["Operador","Responsable de área","Inspector","Administrador"], hallazgo_asignar:["Inspector","Administrador"],
   hallazgo_cerrar:["Responsable de área","Inspector","Administrador"], hallazgo_reabrir:["Inspector","Administrador"], areas_admin:["Inspector","Administrador"],
-  inspeccion_registrar:["Administrador"]
+  inspeccion_registrar:["Administrador"],
+  // control documentario: la aprobación depende del permiso, no del nombre del rol (un rol nuevo solo necesita estar aquí)
+  doc_ver:["Inspector","Administrador"], doc_editar:["Inspector","Administrador"], doc_aprobar:["Inspector","Administrador"]
 };
 function puede_(rol, p){ return (PERMISOS[p]||[]).indexOf(rol) >= 0; }
 function usuariosHoja_(){ return central_(() => hoja_("Usuarios", USU_COLS, ["usuario"])); }
@@ -991,7 +993,7 @@ function guardarHoja_(b, u){
   return {ok:true};
 }
 
-const SIN_TURNO = ["usuarios_listar","actividad_listar","plantas","hallazgos_listar","hallazgo_foto","areas_listar","inspecciones_listar","inspeccion_firmas"];
+const SIN_TURNO = ["usuarios_listar","actividad_listar","plantas","hallazgos_listar","hallazgo_foto","areas_listar","inspecciones_listar","inspeccion_firmas","docs_listar","doc_detalle","doc_version","doc_vigente","doc_pdf"];
 function doPost(e){
   let b0 = null; try{ b0 = JSON.parse(e.postData.contents); }catch(err){ return json_({ok:false, error:"formato"}); }
   const lock = SIN_TURNO.indexOf(b0.action) >= 0 ? {releaseLock:function(){}} : LockService.getScriptLock();
@@ -1028,6 +1030,17 @@ function doPost(e){
     if (A === "inspeccion_guardar") return puede_(u.rol,"inspeccion_registrar") ? json_(inspGuardar_(b, u)) : no;
     if (A === "inspecciones_listar") return puede_(u.rol,"inspeccion_registrar") ? json_(inspListar_(u)) : no;
     if (A === "inspeccion_firmas") return puede_(u.rol,"inspeccion_registrar") ? json_(inspFirmas_(b, u)) : no;
+    // control documentario (la lógica vive en el archivo ControlDoc)
+    const verDocs = puede_(u.rol,"doc_ver") || puede_(u.rol,"inspeccion_registrar");
+    if (A === "docs_listar") return puede_(u.rol,"doc_ver") ? json_(docListar_(u)) : no;
+    if (A === "doc_detalle") return puede_(u.rol,"doc_ver") ? json_(docDetalle_(b, u)) : no;
+    if (A === "doc_version") return verDocs ? json_(docVersion_(b, u)) : no;
+    if (A === "doc_vigente") return verDocs ? json_(docVigente_(b, u)) : no;
+    if (A === "doc_pdf") return puede_(u.rol,"doc_ver") ? json_(docPdf_(b, u)) : no;
+    if (A === "doc_borrador_guardar") return puede_(u.rol,"doc_editar") ? json_(docBorradorGuardar_(b, u)) : no;
+    if (A === "doc_borrador_descartar") return puede_(u.rol,"doc_editar") ? json_(docBorradorDescartar_(b, u)) : no;
+    if (A === "doc_aprobar") return puede_(u.rol,"doc_aprobar") ? json_(docAprobar_(b, u)) : no;
+    if (A === "doc_pdf_guardar") return puede_(u.rol,"doc_aprobar") ? json_(docPdfGuardar_(b, u)) : no;
     if (A === "hallazgo_foto") return json_(hzFoto_(b, u));
     if (A === "areas_listar") return json_(hzAreasListar_(u));
     if (A === "area_guardar") return puede_(u.rol,"areas_admin") ? json_(hzAreaGuardar_(b, u)) : no;
