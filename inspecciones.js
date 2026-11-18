@@ -37,7 +37,7 @@ const ERR = {
   criterios_invalidos:"Faltan criterios por revisar.", nc_invalida:"Una no conformidad no está completa (observación y foto).",
   id_invalido:"La inspección no es válida. Vuelva a empezar.", permiso:"No tiene permiso para esta acción.", clave:"El servidor no reconoce esta acción. Avise al administrador: falta actualizar el script."
 };
-const S = {vista:"lista", lista:null, t:0, cargando:false, areas:null, F:null, enviando:false, err:"", sel:null};
+const S = {falta:"", vista:"lista", lista:null, t:0, cargando:false, areas:null, F:null, enviando:false, err:"", sel:null};
 
 const st = document.createElement("style");
 st.textContent = `
@@ -77,9 +77,10 @@ const claseCal = c => c === "Satisfactorio" ? "sat" : c === "Aceptable con accio
 
 /* ---------- cálculo local (solo vista previa; el servidor recalcula) ---------- */
 function crit1(F){
-  let hay = false, nc = false;
-  F.puntos.forEach(p => COLS.forEach(([k]) => { if(p.c[k] === "NC") nc = true; if(p.c[k] === "C") hay = true; }));
-  return nc ? "NC" : hay ? "C" : "NA";
+  let hay = false, nc = false, falta = false;
+  F.puntos.forEach(p => COLS.forEach(([k]) => { if(p.c[k] === "NC") nc = true; if(p.c[k] === "C") hay = true; if(!p.c[k]) falta = true; }));
+  if(!nc && falta) return "";
+  return nc ? "NC" : hay ? "C" : (F.puntos.length ? "NA" : "NA");
 }
 function resultadoCrit(F, n){ return n === 1 ? crit1(F) : F.crit[n].r; }
 function porcentaje(F){
@@ -90,9 +91,9 @@ function porcentaje(F){
 const calif = p => p === null ? "" : p >= CORTES.sat ? "Satisfactorio" : p >= CORTES.ace ? "Aceptable con acciones" : "No satisfactorio";
 
 /* ---------- estado y borrador ---------- */
-function nuevoPunto(i){ const c = {}; COLS.forEach(([k]) => c[k] = k === "mermas" || k === "peligroso" || k === "vidrio" || k === "metal" ? "NA" : "C"); return {nombre:"Punto " + i, c:c, obs:""}; }
+function nuevoPunto(i){ const c = {}; COLS.forEach(([k]) => c[k] = ""); return {nombre:"Punto " + i, c:c, obs:""}; }   // nada viene marcado: el inspector marca punto por punto
 function nuevoForm(){
-  const crit = {}; for(let n = 1; n <= 17; n++) crit[n] = {r:n === 17 ? "NA" : "C", obs:"", fotos:[]};
+  const crit = {}; for(let n = 1; n <= 17; n++) crit[n] = {r:"", obs:"", fotos:[]};
   return {id:"insp-" + uuid(), area:"", puntos:[nuevoPunto(1)], crit:crit, bloques:{}, respNombre:"", respCargo:"", inspCargo:(function(){ try{ return localStorage.getItem("insp_cargo:" + (SES && SES.usuario)) || "Medio Ambiente"; }catch(e){ return "Medio Ambiente"; } })(), firmaInsp:"", firmaResp:"", t0:hoy() + " " + hora()};
 }
 function guardaBorrador(){ try{ if(S.F) localStorage.setItem(BORR + ":" + (SES && SES.usuario), JSON.stringify(S.F)); }catch(e){} }   // las fotos pueden pesar: si no cabe, no pasa nada
@@ -156,7 +157,7 @@ function pintaForm(){
     <label class="f" for="in-area">Área</label><select id="in-area" class="in"><option value="">Elija el área…</option>${areas.map(a => `<option ${a.nombre === F.area ? "selected" : ""}>${esc(a.nombre)}</option>`).join("")}</select>
     ${areas.length ? "" : `<p class="s">Cargando áreas…</p>`}
     <p class="s">Fecha y hora: ${esc(F.t0)} · Inspector: ${esc(SES ? SES.nombre : "")}</p></div>`;
-  const secB = `<div class="in-card"><h3>B. Puntos de segregación</h3><p class="s">Un punto es un grupo de contenedores. Marque C (conforme), NC o N/A. Todo viene conforme: toque solo lo que no esté bien.</p>` +
+  const secB = `<div class="in-card"><h3>B. Puntos de segregación</h3><p class="s">Un punto es un grupo de contenedores. Marque cada casilla: C (conforme), NC (no conforme) o N/A (no aplica).</p>` +
     F.puntos.map((pt, i) => `<div class="in-pt"><div style="display:flex;gap:6px"><input class="in" data-in-pn="${i}" value="${esc(pt.nombre)}" maxlength="40" style="flex:1;width:auto;min-width:0"><button type="button" class="btn sec sm" data-in-pq="${i}">Quitar</button></div>` +
       COLS.map(([k, t]) => `<div class="c"><span>${t}</span>${sgCell(i, k, pt.c[k])}</div>`).join("") + `</div>`).join("") +
     (F.puntos.length < MAX_PUNTOS ? `<button type="button" class="btn sec sm" data-in="punto">＋ Agregar punto</button>` : "") + `</div>`;
@@ -164,11 +165,11 @@ function pintaForm(){
     `<p class="s" style="margin-top:10px"><b>${esc(nom)}</b></p>` + ns.map(n => {
       const c = F.crit[n], r = resultadoCrit(F, n), auto = n === 1;
       return `<div class="in-crit"><div class="t"><span class="n">${n}.</span> ${esc(CRIT[n])}</div>` +
-        (auto ? `<span class="hz-b ${r === "C" ? "cer" : r === "NC" ? "venc" : "abi"}">${r === "NA" ? "N/A" : r} (automático)</span>` : `<span class="in-sg">${RESP.map(([k]) => `<button type="button" data-in-r="${n}|${k}" class="${k}${c.r === k ? " on" : ""}">${k === "NA" ? "N/A" : k}</button>`).join("")}</span>`) +
+        (auto ? `<span class="hz-b ${r === "C" ? "cer" : r === "NC" ? "venc" : "abi"}">${r === "" ? "Pendiente: se calcula con la sección B" : (r === "NA" ? "N/A" : r) + " (automático)"}</span>` : `<span class="in-sg">${RESP.map(([k]) => `<button type="button" data-in-r="${n}|${k}" class="${k}${c.r === k ? " on" : ""}">${k === "NA" ? "N/A" : k}</button>`).join("")}</span>`) +
         (r === "NC" ? `<div class="in-nc"><textarea class="in" data-in-o="${n}" maxlength="300" placeholder="¿Qué se observó? (mínimo 5 letras)">${esc(c.obs)}</textarea>
           <div class="hz-thumbs">${c.fotos.map((f, fi) => `<div class="hz-thumb"><img src="${f}" alt=""><button type="button" data-in-fq="${n}|${fi}">✕</button></div>`).join("")}</div>
           ${c.fotos.length < MAX_FOTOS ? `<label class="btn sec sm" style="display:inline-block">📷 Foto con la marca<input type="file" accept="image/*" capture="environment" data-in-f="${n}" hidden></label>` : ""}</div>` : "") + `</div>`;
-    }).join("") + `<label class="in-ok"><input type="checkbox" data-in-b="${bi}" ${F.bloques[bi] ? "checked" : ""}> Revisé este bloque</label>`).join("") + `</div>`;
+    }).join("") ).join("") + `</div>`;
   const secD = `<div class="in-card"><h3>D. Resultado</h3>
     <div class="in-res ${claseCal(cal)}"><b>${p === null ? "s/d" : p + " %"}</b> ${esc(cal || "Sin criterios aplicables")}<div class="s">Conformidad = conformes ÷ (conformes + no conformes). Los N/A no cuentan. Cortes provisionales: ≥ ${CORTES.sat} % satisfactorio, ${CORTES.ace}–${CORTES.sat - 0.1} % aceptable con acciones, menor a ${CORTES.ace} % no satisfactorio.</div></div></div>
   <div class="in-card"><h3>E. Firmas</h3>
@@ -200,7 +201,11 @@ function leeCampos(){
 function validaLocal(F){
   if(!F.area) return "Elija el área.";
   if(F.puntos.some(p => !p.nombre.trim())) return "Cada punto de segregación necesita un nombre.";
-  for(let bi = 0; bi < BLOQUES.length; bi++) if(!F.bloques[bi]) return "Marque «Revisé este bloque» en: " + BLOQUES[bi][0] + ".";
+  for(let i = 0; i < F.puntos.length; i++){
+    const f = COLS.filter(([k]) => !F.puntos[i].c[k])[0];
+    if(f){ S.falta = `[data-in-c="${i}|${f[0]}"]`; return "Punto de segregación «" + F.puntos[i].nombre + "»: falta marcar " + f[1] + ". Marque C, NC o N/A en cada casilla."; }
+  }
+  for(let n = 2; n <= 17; n++) if(!F.crit[n].r){ S.falta = `[data-in-r^="${n}|"]`; return "Criterio " + n + ": falta marcar C, NC o N/A."; }
   for(let n = 1; n <= 17; n++){
     if(resultadoCrit(F, n) !== "NC") continue;
     const c = F.crit[n];
@@ -214,7 +219,13 @@ function validaLocal(F){
 }
 async function enviar(){
   const F = S.F; if(!F || S.enviando) return; leeCampos();
-  S.err = validaLocal(F); if(S.err) return pintaForm();
+  S.falta = ""; S.err = validaLocal(F);
+  if(S.err){
+    pintaForm();
+    const el = S.falta && box().querySelector(S.falta);
+    if(el){ el.scrollIntoView({block:"center", behavior:"smooth"}); const c = el.closest(".c, .in-crit"); if(c){ c.style.outline = "2px solid var(--red)"; c.style.borderRadius = "8px"; } }
+    return;
+  }
   if(!navigator.onLine){ S.err = "Sin señal. Su inspección está guardada como borrador: toque Guardar cuando tenga señal."; guardaBorrador(); return pintaForm(); }
   S.enviando = true; pintaForm();
   const criterios = []; for(let n = 1; n <= 17; n++){ const r = resultadoCrit(F, n), c = F.crit[n]; criterios.push(r === "NC" ? {n:n, r:r, obs:c.obs.trim(), fotos:c.fotos} : {n:n, r:r}); }
@@ -367,7 +378,6 @@ document.addEventListener("click", async ev => {
 document.addEventListener("change", async ev => {
   const t = ev.target, F = S.F; if(!F || TAB !== "insp") return;
   if(t.id === "in-area"){ F.area = t.value; guardaBorrador(); return; }
-  if(t.dataset.inB !== undefined){ F.bloques[+t.dataset.inB] = t.checked; guardaBorrador(); return; }
   if(t.dataset.inF !== undefined){
     const n = +t.dataset.inF, file = t.files && t.files[0]; if(!file || F.crit[n].fotos.length >= MAX_FOTOS) return;
     leeCampos();
