@@ -113,7 +113,7 @@ function fila(h){
   return `<button class="hz-row ${c}" type="button" data-hz-abrir="${esc(h.id)}">
     <div class="l1"><b>${esc(h.area)}</b>${badge(h)}</div>
     <div class="d">${esc(d.length > 90 ? d.slice(0, 90) + "…" : d)}</div>
-    <div class="m">${esc(h.tipo)} · <span class="${h.riesgo==="Alto"?"hz-alto":""}">riesgo ${esc(h.riesgo.toLowerCase())}</span> · ${esc(fecha(h.creado))}${h.areaEjecutora ? ` · Ejecuta: <b>${esc(h.areaEjecutora)}</b>` : ""}${h.plazo ? ` · Plazo ${esc(fecha(h.plazo))}` : ""}</div>
+    <div class="m">${esc(h.tipo)} · <span class="${h.riesgo==="Alto"?"hz-alto":""}">riesgo ${esc(h.riesgo.toLowerCase())}</span> · ${esc(fecha(h.creado))}${h.areaEjecutora ? ` · Ejecuta: <b>${esc(h.areaEjecutora)}</b>` : ""}${h.plazo ? ` · Plazo ${esc(fecha(h.plazo))}` : ""}${h.areaEjecutora && !h.avisoSap && h.estado !== "Cerrado" ? ` · <b style="color:var(--orange)">Aviso SAP pendiente</b>` : ""}</div>
   </button>`;
 }
 
@@ -203,6 +203,8 @@ function pintaDetalle(){
         <span>Reportó</span><span>${esc(h.reportadoNombre)} · ${esc(fecha(h.creado))}</span>
         ${h.areaEjecutora ? `<span>Ejecuta</span><span>${esc(h.areaEjecutora)}</span>` : ""}
         ${h.plazo ? `<span>Plazo</span><span>${esc(fecha(h.plazo))}</span>` : ""}
+        ${h.responsable ? `<span>Responsable</span><span>${esc(h.responsable)}</span>` : ""}
+        ${h.areaEjecutora ? `<span>Aviso SAP</span><span>${h.avisoSap ? esc(h.avisoSap) : `<b style="color:var(--orange)">Pendiente</b>`}</span>` : ""}
       </div>
       <label class="f">Fotos</label><div class="hz-fotos">${ph("hallazgo", h.nFotos)}</div>
       ${h.estado === "Cerrado" ? `<label class="f">Cierre</label>
@@ -247,7 +249,8 @@ function accionesHall(h){
 }
 function iniciaAccion(t){
   const h = (S.lista || []).find(x => x.id === S.id); if(!h) return;
-  S.accion = {t, id:h.id, ej:h.areaEjecutora || "", plazo:h.plazo || masDias(hoyStr(), 7), com:"", mot:"", ev:[], pdf:""};
+  const sap = h.avisoSap || "";
+  S.accion = {t, id:h.id, ej:h.areaEjecutora || "", plazo:h.plazo || masDias(hoyStr(), 7), resp:h.responsable || "", sap:sap === "" ? "pend" : sap === "No aplica" ? "na" : "cod", cod:(sap && sap !== "No aplica") ? sap : "", com:"", mot:"", ev:[], pdf:""};
   if(S.areas === null) cargaAreas();
   repinta();
 }
@@ -261,6 +264,11 @@ function panelAccion(h, A){
       <select id="hz-ej" class="in"><option value="">Elegir…</option>${E.map(a => `<option ${a.nombre===A.ej?"selected":""}>${esc(a.nombre)}</option>`).join("")}</select>
       <label class="f" for="hz-plazo">Plazo de ejecución</label>
       <input type="date" id="hz-plazo" class="in" min="${hoy}" max="${masDias(hoy, 365)}" value="${esc(A.plazo)}">
+      <label class="f" for="hz-resp">Responsable <span class="muted">(opcional)</span></label>
+      <input id="hz-resp" class="in" maxlength="60" autocomplete="off" placeholder="Nombre de la persona a cargo" value="${esc(A.resp)}">
+      <label class="f" for="hz-sap">Aviso SAP</label>
+      <select id="hz-sap" class="in"><option value="pend" ${A.sap==="pend"?"selected":""}>Pendiente de generar</option><option value="cod" ${A.sap==="cod"?"selected":""}>Ya tiene aviso</option><option value="na" ${A.sap==="na"?"selected":""}>No aplica</option></select>
+      ${A.sap==="cod" ? `<input id="hz-cod" class="in" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="N.° de aviso SAP" value="${esc(A.cod)}" style="margin-top:8px">` : ""}
       ${err}${bot("Guardar")}</div>`;
   }
   if(A.t === "cerrar"){
@@ -283,6 +291,7 @@ function leeAccion(){
   const A = S.accion; if(!A) return;
   const v = id => { const e = document.getElementById(id); return e ? e.value : null; };
   if(v("hz-ej") !== null) A.ej = v("hz-ej"); if(v("hz-plazo") !== null) A.plazo = v("hz-plazo");
+  if(v("hz-resp") !== null) A.resp = v("hz-resp"); if(v("hz-sap") !== null) A.sap = v("hz-sap"); if(v("hz-cod") !== null) A.cod = v("hz-cod");
   if(v("hz-com") !== null) A.com = v("hz-com"); if(v("hz-mot") !== null) A.mot = v("hz-mot");
 }
 async function agregaEvidencia(file){
@@ -310,7 +319,9 @@ async function guardarAccion(){
     if(!A.ej) return void(e.textContent = "Elija el área ejecutante.");
     if(!A.plazo) return void(e.textContent = "Elija el plazo.");
     if(A.plazo < hoyStr()) return void(e.textContent = ERR.plazo_invalido);
-    body = {action:"hallazgo_asignar", id:A.id, areaEjecutora:A.ej, plazo:A.plazo}; ok = "Hallazgo asignado a " + A.ej + ".";
+    const cod = A.cod.trim();
+    if(A.sap === "cod" && !/^[A-Za-z0-9-]{3,20}$/.test(cod)) return void(e.textContent = "Escriba el número de aviso SAP, o elija «Pendiente de generar».");
+    body = {action:"hallazgo_asignar", id:A.id, areaEjecutora:A.ej, plazo:A.plazo, responsable:A.resp.trim().replace(/\s+/g, " "), avisoSap:A.sap === "na" ? "No aplica" : A.sap === "cod" ? cod : ""}; ok = "Hallazgo asignado a " + A.ej + ".";
   } else if(A.t === "cerrar"){
     if(!A.ev.length) return void(e.textContent = ERR.evidencia_requerida);
     body = {action:"hallazgo_cerrar", id:A.id, comentario:A.com, evidencia:A.ev}; ok = "Hallazgo cerrado.";
@@ -450,7 +461,8 @@ document.addEventListener("change", ev => {
   if(t.id === "hz-file") agregaFoto(t.files && t.files[0]);
   else if(t.id === "hz-file2") agregaEvidencia(t.files && t.files[0]);
   else if(t.id === "hz-area" || t.id === "hz-tipo") leeCampos();
-  else if(t.id === "hz-ej" || t.id === "hz-plazo") leeAccion();
+  else if(t.id === "hz-ej" || t.id === "hz-plazo" || t.id === "hz-resp" || t.id === "hz-cod") leeAccion();
+  else if(t.id === "hz-sap"){ leeAccion(); repinta(); }
   else if(t.dataset && t.dataset.hzAreTipo !== undefined){ const a = (S.areasAdm || []).find(x => x.nombre === t.dataset.hzAreTipo); if(a) guardaArea({nombre:a.nombre, tipo:t.value, ejecutora:a.ejecutora, activo:a.activo}, "Tipo actualizado."); }
   else if(t.dataset && t.dataset.hzAreEje !== undefined){ const a = (S.areasAdm || []).find(x => x.nombre === t.dataset.hzAreEje); if(a) guardaArea({nombre:a.nombre, tipo:a.tipo, ejecutora:t.checked, activo:a.activo}, t.checked ? "Marcada como ejecutora." : "Ya no es ejecutora."); }
   else if(t.id === "u-rol") pintaUsrAreasNuevo();
