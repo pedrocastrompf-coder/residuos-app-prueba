@@ -81,14 +81,17 @@ async function filasDocx(zip, P){
 /* ---------- análisis: de filas a formato ---------- */
 const RE_CODIGO = /\b[A-Z]{2,6}(?:[.\-][A-Z0-9]{1,6}){2,4}\b/;
 const RE_ETIQ = /^(c[oó]digo|versi[oó]n|fecha|p[aá]gina|revisi[oó]n|aprobad|elaborad|revisad|planta|[aá]rea|proceso|hora|responsable|lugar|sede)\b/i;
-const CORTAS = /^(c|nc|na|n\/a|n\.a\.?|si|sí|no|x|cant\.?|cantidad|buena|mala|bueno|malo|ok|n°|nº|no\.|item|ítem|#)$/i;
-const RE_CRIT = /criterio|requisito|aspecto|verificaci[oó]n|pregunta|punto a (evaluar|verificar)|descripci[oó]n|actividad a/i;
-const RE_FIN = /^(responsable|firma|nombres?( y apellidos)?|cargo|observaciones generales|conclusi|comentarios|leyenda|custodia|elaborado|revisado|aprobado|v[°º]\s*b)/i;
+const CORTAS = /^(c|nc|na|n\/a|n\.a\.?|si|sí|no|cumple|no cumple|conforme|no conforme|x|cant\.?|cantidad|buena|mala|bueno|malo|ok|n°|nº|no\.|item|ítem|#)$/i;
+const RE_CRIT = /criterio|requisito|aspecto|verificaci[oó]n|a verificar|a evaluar|a inspeccionar|pregunta|[ií]tems?\b|descripci[oó]n|actividad a|condici[oó]n/i;
+// columnas de respuesta: C / NC, SI / NO o CUMPLE / NO CUMPLE (todas se registran en la app como C / NC / NA)
+const RESP_SI = /^(c|s[ií]|cumple|conforme|ok)$/i, RESP_NO = /^(nc|no|no cumple|no conforme)$/i;
+const esResp = f => f.some(x => RESP_SI.test(x.t)) && f.some(x => RESP_NO.test(x.t));
+const RE_FIN = /^(responsable|firma|nombres?( y apellidos)?|cargo|observaci[oó]n(es)?( generales| adicionales)?\s*:|observaciones generales|conclusi|comentarios|leyenda|custodia|elaborado|revisado|aprobado|v[°º]\s*b)/i;
 const RE_PUNTO = /punto|contenedor|estaci[oó]n/i;
 const COLORES = [[/no\s*aprovech/i, "#1f1f1f"], [/org[aá]nic/i, "#8b5a2b"], [/papel|cart[oó]n/i, "#1f5fbf"], [/pl[aá]stic/i, "#ffffff"], [/vidrio/i, "#2e8b3d"], [/metal/i, "#f2c200"], [/peligros/i, "#d32f2f"]];
 const TIPO_HZ = [[/envase|contenci[oó]n|bandeja/i, "Almacenamiento y acopio"], [/^orden|orden y limpieza|limpieza de/i, "Orden y limpieza"], [/derram|kit|fuga de (aceite|qu[ií]mic)/i, "Derrames y fugas"], [/peligros|qu[ií]mic|fds|hoja de seguridad|insumo/i, "Almacenamiento y acopio"],
   [/segrega|c[oó]digo de colores|bolsa|rotul|merma|envoltur/i, "Segregación de residuos"], [/contenedor|acopio|almac|capacidad|sobrellen/i, "Almacenamiento y acopio"],
-  [/efluente|desag[uü]e|trampa|vertimiento|cip/i, "Efluentes y desagües"], [/agua|energ[ií]a|vapor|aire comprimido|flujo|luz|equipos? apagad/i, "Uso de agua y energía"],
+  [/efluente|desag[uü]e|trampa|vertimiento|\bcip\b/i, "Efluentes y desagües"], [/agua|energ[ií]a|vapor|aire comprimido|flujo|luz|equipos? apagad/i, "Uso de agua y energía"],
   [/orden|limpieza|plaga/i, "Orden y limpieza"]];
 const tipoHz = t => { for(const [r, h] of TIPO_HZ) if(r.test(t)) return h; return "Otro"; };
 
@@ -111,8 +114,8 @@ function analizar(filas){
   let iCrit = -1, cCrit = -1;
   for(let i = 0; i < filas.length && iCrit < 0; i++){
     const f = filas[i], h = f.filter(x => RE_CRIT.test(x.t) && x.t.length <= 160)[0];
-    const cnc = f.some(x => /^c$/i.test(x.t)) && f.some(x => /^nc$/i.test(x.t));
-    if(h && (cnc || /criterio|requisito|aspecto/i.test(h.t))){ iCrit = i; cCrit = h.c; }
+    const cnc = esResp(f);
+    if(h && (cnc || /criterio|requisito|aspecto|a verificar|a evaluar/i.test(h.t))){ iCrit = i; cCrit = h.c; }
     else if(cnc && i > 0 && f.filter(x => !CORTAS.test(x.t)).length >= 1 && !filas.slice(i + 1, i + 3).some(g => g.every(x => CORTAS.test(x.t) || /^\d+$/.test(x.t)))){ iCrit = i; cCrit = (f.filter(x => !CORTAS.test(x.t))[0] || {c:0}).c; }
   }
 
@@ -144,12 +147,14 @@ function analizar(filas){
     const princ = txt.filter(x => cCrit < 0 || x.c >= cCrit - 1).sort((a, b) => b.t.length - a.t.length)[0] || txt[0];
     const t0 = sinNumero(princ.t.replace(/\n/g, " "));
     if(RE_FIN.test(t0) || /^[A-H][.)]\s/.test(princ.t)) { if(n) break; else continue; }
-    if(/^otros?\s*(\(.*\))?\s*:?\s*$/i.test(t0)) continue;     // «Otro:» se omite
-    const esGrupo = txt.length === 1 && mayus(t0) && t0.length <= 60 && !/^\s*\d/.test(princ.t) && !/[.:;]$/.test(t0);
-    if(esGrupo){ g = {nombre:recorta(oracion(t0), 50), items:[]}; grupos.push(g); continue; }
+    if(/^\*/.test(t0)) continue;                               // notas al pie («*Según reglamento…»)
+    const numerado = /^\s*\d/.test(princ.t) || f.some(x => x.c < princ.c && /^\d{1,3}$/.test(x.t));
+    if(/^otros?\s*(\(.*\))?\s*:?\s*$/i.test(t0) && (numerado || /:\s*$/.test(t0))) continue;     // fila «Otro:» se omite
+    const esGrupo = txt.length === 1 && mayus(t0) && t0.length <= 90 && !numerado && !/[.:;]$/.test(t0);
+    if(esGrupo){ g = {nombre:recorta(oracion(t0.replace(/\*+$/, "").trim()), 50), items:[]}; grupos.push(g); continue; }
     if(t0.length < 3) continue;
     if(!g){ g = {nombre:"Criterios de inspección", items:[]}; grupos.push(g); }
-    const t = recorta(oracion(t0), 200);
+    const t = recorta(oracion(t0.replace(/\s*\*+$/, "")), 200);
     if(t0.length > 200) avisos.push("El criterio «" + t.slice(0, 40) + "…» era muy largo y se recortó.");
     g.items.push({t:t, h:tipoHz(t0), auto:""}); n++;
   }
@@ -163,6 +168,16 @@ function analizar(filas){
     const r = f.filter(x => /^responsable|^inspector|^v[°º]\s*b/i.test(x.t) && !/custodia/i.test(x.t));
     if(r.length >= 2){ firmas = {insp:recorta(oracion(r[0].t.split("\n")[0]), 60), resp:recorta(oracion(r[1].t.split("\n")[0]), 60)}; break; }
   }
+  if(firmas.insp === "Responsable de la inspección" && firmas.resp === "Responsable del área inspeccionada"){
+    const et = todas.filter(x => /^responsable\b.{3,60}:\s*$/i.test(x.t) && !/custodia/i.test(x.t)).map(x => recorta(oracion(x.t.replace(/:\s*$/, "")), 60));
+    if(et.length >= 2) firmas = {insp:et[0], resp:et[1]};
+  }
+  // datos generales que la app todavía no tiene como campos propios
+  const fijos = /^(planta|[aá]rea( inspeccionada)?|fecha|hora|responsable\b)/i;
+  const extra = filas.slice(0, iCrit >= 0 ? iCrit : 12).map(f => f.filter(x => /:\s*$/.test(x.t) && x.t.length <= 50 && !RE_ETIQ.test(x.t.replace(/^(planta|[aá]rea|hora|responsable)\b.*/i, "c[oó]digo")) && !fijos.test(x.t)).map(x => x.t.replace(/:\s*$/, ""))).reduce((a, b) => a.concat(b), [])
+    .filter(t => !/^(c[oó]digo|versi[oó]n|fecha de aprobaci[oó]n)$/i.test(t));
+  if(extra.length) avisos.push("Datos generales del archivo que aún no se pueden agregar como campos: " + extra.join(", ") + ". Llegan en el paso 2 (campos configurables).");
+  if(iCrit >= 0 && filas[iCrit].some(x => /^s[ií]$/i.test(x.t))) avisos.push("Las respuestas SI / NO / NA del archivo se registran en la app como C / NC / NA.");
   // resultado
   const resultado = todas.some(x => /%\s*de\s*(conformidad|cumplimiento)|calificaci[oó]n/i.test(x.t)) || iCrit >= 0
     ? {modo:"porcentaje", cortes:{sat:90, ace:70}} : {modo:"texto", titulo:"Resultados de la inspección"};
