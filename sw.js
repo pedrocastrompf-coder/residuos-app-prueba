@@ -1,5 +1,5 @@
 /* Service worker: la app abre sin señal. Sube V al cambiar archivos. */
-const V = "pesaje-v129";
+const V = "pesaje-v130";
 const SHELL = ["./", "index.html", "config.js", "hallazgos.js", "hallazgos-img.js", "inspecciones.js", "controldoc.js", "manifest.webmanifest", "img/icon-192.png", "img/icon-512.png", "img/logo.png", "img/logo-formato.png", "img/isotipo.png", "fonts/inter.woff2", "lib/html2canvas.min.js", "lib/jspdf.umd.min.js"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(V).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

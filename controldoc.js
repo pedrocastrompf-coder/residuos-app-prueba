@@ -241,10 +241,7 @@ async function aprobar(versionId){
 async function pdfVigente(versionId, btn){
   const D = S.det, v = D.versiones.filter(x => x.versionId === versionId)[0]; if(!v) return;
   await conBoton(btn, "Preparando…", async () => {
-    if(v.tienePdf){
-      const j = await postJ({action:"doc_pdf", versionId:versionId}, 60000);
-      if(j && j.ok){ const b = await (await fetch(j.dataUrl)).blob(); return muestra(new File([b], j.nombre, {type:"application/pdf"})); }
-    }
+    // se arma siempre al momento con el diseño actual (logo, encabezado); la copia de Drive es solo respaldo
     const vv = await version(versionId), file = await pdfBlanco(fmtDe(D, vv, vv.definicion));
     muestra(file);
     if(can("doc_aprobar") && !v.tienePdf){                  // la vigente aún no tiene su PDF en Drive (por ejemplo, la carga inicial): se guarda ahora
