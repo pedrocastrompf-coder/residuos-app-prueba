@@ -6,6 +6,9 @@
 "use strict";
 
 const TIPOS_HZ = ["Segregación de residuos","Almacenamiento y acopio","Derrames y fugas","Efluentes y desagües","Orden y limpieza","Uso de agua y energía","Otro"];
+const TIPOS_DATO = [["texto","Texto"],["numero","Número"],["fecha","Fecha"],["hora","Hora"],["lista","Lista de opciones"],["area","Área de la planta"]];
+const TIPOS_COL = [["texto","Texto"],["numero","Número"],["fecha","Fecha"],["hora","Hora"],["lista","Lista de opciones"],["sino","Sí / No"],["firma","Firma"]];
+const opc = v => Array.isArray(v) ? v.join(", ") : String(v || "");
 const COLORES = [["","Sin color"],["#1f1f1f","Negro"],["#8b5a2b","Marrón"],["#1f5fbf","Azul"],["#ffffff","Blanco"],["#2e8b3d","Verde"],["#f2c200","Amarillo"],["#d32f2f","Rojo"],["#8a8077","Gris"],["#e07b1f","Naranja"]];
 const ERR = {
   accion:"El servidor todavía no tiene el módulo de Control documentario. Pegue Code.gs, ControlDoc.gs e Inspecciones.gs en el script y publique una nueva versión.", codigo_invalido:"El código debe tener de 3 a 30 caracteres: letras, números, punto o guion (por ejemplo SGA.R.G.010).", codigo_existe:"Ya existe un documento con ese código.",
@@ -222,6 +225,15 @@ function pintaEditor(){
     ${E.impNombre ? resumenImp(E.imp, E.impNombre) : ""}
     <div class="in-card"><h3>Encabezado</h3><p class="s">${esc(E.codigo)} · ${E.borrador ? "borrador versión " + esc(E.borrador) : "nueva versión (se numera al guardar)"}</p>
       <label class="f">Título del formato</label><input class="in" data-dc-f="titulo" maxlength="80" value="${esc(d.titulo)}"></div>
+    <div class="in-card"><h3>Datos generales</h3><p class="s">La fecha, la hora y el nombre de quien llena el formato se registran solos.</p>
+      <label class="dc-chk"><input type="checkbox" data-dc="datos-usa" ${d.datos ? "checked" : ""}> Usar campos propios</label>
+      ${!d.datos ? `<p class="s">Sin campos propios se pide solo el Área de la planta.</p>` : d.datos.map((c, i) => `<div class="dc-it">
+        <div class="dc-col"><input class="in" data-dc-f="dt.${i}.t" maxlength="40" value="${esc(c.t)}" placeholder="Nombre del campo (p. ej. Razón social)">
+        <select class="in" data-dc-f="dt.${i}.tipo">${TIPOS_DATO.map(([v, t]) => `<option value="${v}" ${c.tipo === v ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+        ${c.tipo === "lista" ? `<input class="in" style="margin-top:6px" data-dc-f="dt.${i}.opciones" value="${esc(opc(c.opciones))}" placeholder="Opciones separadas por coma">` : ""}
+        <div style="display:flex;justify-content:space-between;align-items:center"><label class="dc-chk" style="margin:6px 0 0"><input type="checkbox" data-dc="dt-req" data-i="${i}" ${c.req !== false ? "checked" : ""}> Obligatorio</label>${tools("dt", i, d.datos.length)}</div></div>`).join("") +
+        (d.datos.length < 12 ? `<button type="button" class="btn sec sm" data-dc="dt-agrega">＋ Agregar campo</button>` : "") +
+        `<p class="s">${d.datos.some(c => c.tipo === "area") ? "Con un campo «Área de la planta», cada no conformidad crea un hallazgo." : "Sin un campo «Área de la planta», las no conformidades quedan en el registro, pero no crean hallazgos."}</p>`}</div>
     <div class="in-card"><h3>Tabla de puntos</h3><p class="s">Filas que agrega quien llena el formato (por ejemplo, puntos de segregación), con columnas C / NC / N/A.</p>
       <label class="dc-chk"><input type="checkbox" data-dc="puntos-usa" ${P ? "checked" : ""}> Usar tabla de puntos</label>
       ${P ? `<label class="f">Título de la tabla</label><input class="in" data-dc-f="p.titulo" maxlength="60" value="${esc(P.titulo)}">
@@ -232,7 +244,19 @@ function pintaEditor(){
       ${P.columnas.length < 14 ? `<button type="button" class="btn sec sm" data-dc="col-agrega">＋ Agregar columna</button>` : ""}
       <label class="f">Criterio que se calcula con esta tabla</label><select class="in" data-dc-auto="1"><option value="">Ninguno (todos se marcan a mano)</option>${(() => { let k = 0; return d.criterios.grupos.map((g, gi) => g.items.map((it, ii) => { k++; return `<option value="${gi}.${ii}" ${it.auto === "puntos" ? "selected" : ""}>${k}. ${esc((it.t || "(sin texto)").slice(0, 60))}</option>`; }).join("")).join(""); })()}</select>
       <p class="s">Ese criterio será «no conforme» si algún punto tiene NC, y conforme si todos están conformes.</p>` : ""}</div>
-    <div class="in-card"><h3>Criterios de inspección</h3><p class="s">Se numeran solos en el orden en que aparecen. El tipo de hallazgo es el que se crea si el criterio es «no conforme».</p>
+    <div class="in-card"><h3>Tabla de registro</h3><p class="s">Filas que agrega quien llena el formato: asistentes, equipos entregados, mediciones… Cada columna tiene su tipo; con «Firma», cada fila se firma.</p>
+      <label class="dc-chk"><input type="checkbox" data-dc="registro-usa" ${d.registro ? "checked" : ""}> Usar tabla de registro</label>
+      ${d.registro ? `<label class="f">Título de la tabla</label><input class="in" data-dc-f="rg.titulo" maxlength="60" value="${esc(d.registro.titulo)}">
+      <div class="dc-2"><div><label class="f">Nota (opcional)</label><input class="in" data-dc-f="rg.nota" maxlength="150" value="${esc(d.registro.nota || "")}"></div><div><label class="f">Máximo de filas</label><input class="in" type="number" min="1" max="60" data-dc-f="rg.max" value="${esc(d.registro.max)}"></div></div>
+      <label class="f">Columnas</label>
+      ${d.registro.columnas.map((c, i) => `<div class="dc-it"><div class="dc-col"><input class="in" data-dc-f="rc.${i}.t" maxlength="30" value="${esc(c.t)}" placeholder="Nombre de la columna">
+        <select class="in" data-dc-f="rc.${i}.tipo">${TIPOS_COL.map(([v, t]) => `<option value="${v}" ${c.tipo === v ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+        ${c.tipo === "lista" ? `<input class="in" style="margin-top:6px" data-dc-f="rc.${i}.opciones" value="${esc(opc(c.opciones))}" placeholder="Opciones separadas por coma">` : ""}
+        <div style="display:flex;justify-content:space-between;align-items:center"><label class="dc-chk" style="margin:6px 0 0"><input type="checkbox" data-dc="rc-req" data-i="${i}" ${c.req !== false ? "checked" : ""}> Obligatorio</label>${tools("rc", i, d.registro.columnas.length)}</div></div>`).join("")}
+      ${d.registro.columnas.length < 10 ? `<button type="button" class="btn sec sm" data-dc="rc-agrega">＋ Agregar columna</button>` : ""}` : ""}</div>
+    <div class="in-card"><h3>Criterios de inspección</h3>
+      ${d.registro ? `<label class="dc-chk"><input type="checkbox" data-dc="criterios-usa" ${d.criterios.grupos.length ? "checked" : ""}> Usar criterios de verificación</label>` : ""}
+      ${!d.criterios.grupos.length ? `<p class="s">Sin criterios: el formato es solo un registro.</p>` : `<p class="s">Se numeran solos en el orden en que aparecen. El tipo de hallazgo es el que se crea si el criterio es «no conforme».</p>
       ${d.criterios.grupos.map((g, gi) => `<div class="dc-it" style="background:#fff">
         <label class="f">Grupo</label><input class="in" data-dc-f="g.${gi}.nombre" maxlength="50" value="${esc(g.nombre)}">${tools("grp", gi, d.criterios.grupos.length)}
         ${g.items.map((it, ii) => { n++; return `<div class="dc-it"><label class="f">Criterio ${n}</label><textarea class="in" data-dc-f="it.${gi}.${ii}.t" maxlength="200">${esc(it.t)}</textarea>
@@ -240,14 +264,14 @@ function pintaEditor(){
           <label class="f" style="margin-top:6px">Tipo de hallazgo si es «no conforme»</label><select class="in" data-dc-f="it.${gi}.${ii}.h">${TIPOS_HZ.map(t => `<option ${it.h === t ? "selected" : ""}>${t}</option>`).join("")}</select>
           ${tools("it", ii, g.items.length, "").replace(/data-i="/g, `data-g="${gi}" data-i="`)}</div>`; }).join("")}
         ${g.items.length < 20 ? `<button type="button" class="btn sec sm" data-dc="it-agrega" data-g="${gi}">＋ Agregar criterio</button>` : ""}</div>`).join("")}
-      ${d.criterios.grupos.length < 8 ? `<button type="button" class="btn sec sm" data-dc="grp-agrega">＋ Agregar grupo</button>` : ""}</div>
+      ${d.criterios.grupos.length < 8 ? `<button type="button" class="btn sec sm" data-dc="grp-agrega">＋ Agregar grupo</button>` : ""}`}</div>
     <div class="in-card"><h3>Resultado</h3>
-      <div class="dc-op"><label class="${R.modo !== "texto" ? "on" : ""}"><input type="radio" name="dc-res" data-dc="res-pct">% de cumplimiento</label><label class="${R.modo === "texto" ? "on" : ""}"><input type="radio" name="dc-res" data-dc="res-txt">Texto</label></div>
-      ${R.modo === "texto" ? `<label class="f">Título del campo</label><input class="in" data-dc-f="r.titulo" maxlength="60" value="${esc(R.titulo || "")}"><p class="s">El inspector escribe los resultados de la inspección.</p>`
+      <div class="dc-op">${d.criterios.grupos.length ? `<label class="${R.modo === "porcentaje" ? "on" : ""}"><input type="radio" name="dc-res" data-dc="res-pct">% de cumplimiento</label>` : ""}<label class="${R.modo === "texto" ? "on" : ""}"><input type="radio" name="dc-res" data-dc="res-txt">Texto</label><label class="${R.modo === "ninguno" ? "on" : ""}"><input type="radio" name="dc-res" data-dc="res-nin">Sin resultado</label></div>
+      ${R.modo === "ninguno" ? `<p class="s">El formato no pide resultado.</p>` : R.modo === "texto" ? `<label class="f">Título del campo</label><input class="in" data-dc-f="r.titulo" maxlength="60" value="${esc(R.titulo || "")}"><p class="s">El inspector escribe los resultados de la inspección.</p>`
         : `<div class="dc-2"><div><label class="f">Satisfactorio desde (%)</label><input class="in" type="number" min="1" max="100" data-dc-f="r.sat" value="${esc(R.cortes.sat)}"></div><div><label class="f">Aceptable desde (%)</label><input class="in" type="number" min="1" max="99" data-dc-f="r.ace" value="${esc(R.cortes.ace)}"></div></div><p class="s">Por debajo del aceptable: no satisfactorio. Los N/A no cuentan.</p>`}</div>
     <div class="in-card"><h3>Firmas</h3>
-      <label class="f">Firma 1 (quien inspecciona)</label><input class="in" data-dc-f="f.insp" maxlength="60" value="${esc(d.firmas.insp)}">
-      <label class="f">Firma 2 (responsable del área)</label><input class="in" data-dc-f="f.resp" maxlength="60" value="${esc(d.firmas.resp)}"></div>
+      <label class="f">Firma 1 (quien llena el formato)</label><input class="in" data-dc-f="f.insp" maxlength="60" value="${esc(d.firmas.insp)}">
+      <label class="f">Firma 2 (opcional)</label><input class="in" data-dc-f="f.resp" maxlength="60" value="${esc(d.firmas.resp || "")}" placeholder="Déjelo vacío si firma una sola persona"></div>
     <div class="in-card"><h3>Motivo del cambio</h3><textarea class="in" data-dc-f="motivo" maxlength="500" placeholder="¿Qué se cambia y por qué? (queda en el control de cambios)">${esc(E.motivo)}</textarea></div>
     <div class="err" id="dc-err">${esc(S.err)}</div>
     <div class="in-foot"><div class="in-nav"><button class="btn sec" data-dc="previa-ed">Vista previa</button><button class="btn" data-dc="guardar" ${S.ocupado ? "disabled" : ""}>${S.ocupado ? "Guardando…" : "Guardar borrador"}</button></div></div></div>`;
@@ -263,6 +287,9 @@ function campo(path, v){
   else if(p[0] === "it") d.criterios.grupos[+p[1]].items[+p[2]][p[3]] = v;
   else if(p[0] === "r"){ if(p[1] === "titulo") d.resultado.titulo = v; else d.resultado.cortes[p[1]] = Number(v); }
   else if(p[0] === "f") d.firmas[p[1]] = v;
+  else if(p[0] === "dt") d.datos[+p[1]][p[2]] = v;
+  else if(p[0] === "rc") d.registro.columnas[+p[1]][p[2]] = v;
+  else if(p[0] === "rg"){ if(p[1] === "max") d.registro.max = Number(v); else d.registro[p[1]] = v; }
   guardaLocal();
 }
 const mueve = (L, i, k) => { const j = i + k; if(j < 0 || j >= L.length) return; const x = L[i]; L[i] = L[j]; L[j] = x; };
@@ -276,7 +303,22 @@ function validaEd(E){
     if(!d.puntos.columnas.length) return "La tabla de puntos necesita al menos una columna.";
     if(d.puntos.columnas.some(c => !T(c.t, 2, 30))) return "Cada columna necesita un nombre (2 a 30 caracteres).";
   }
-  if(!d.criterios.grupos.length) return "Agregue al menos un grupo de criterios.";
+  if(d.datos) for(const c of d.datos){
+    if(!T(c.t, 2, 40)) return "Cada dato general necesita un nombre (2 a 40 caracteres).";
+    if(c.tipo === "lista" && opc(c.opciones).split(",").filter(x => x.trim()).length < 2) return "La lista «" + c.t + "» necesita al menos 2 opciones.";
+  }
+  if(d.datos && d.datos.filter(c => c.tipo === "area").length > 1) return "Solo un dato general puede ser «Área de la planta».";
+  if(d.registro){
+    if(!T(d.registro.titulo, 3, 60)) return "Escriba el título de la tabla de registro.";
+    if(!(d.registro.max >= 1 && d.registro.max <= 60)) return "El máximo de filas debe estar entre 1 y 60.";
+    if(!d.registro.columnas.length) return "La tabla de registro necesita al menos una columna.";
+    for(const c of d.registro.columnas){
+      if(!T(c.t, 2, 30)) return "Cada columna de la tabla de registro necesita un nombre (2 a 30 caracteres).";
+      if(c.tipo === "lista" && opc(c.opciones).split(",").filter(x => x.trim()).length < 2) return "La columna «" + c.t + "» necesita al menos 2 opciones.";
+    }
+    if(d.registro.columnas.filter(c => c.tipo === "firma").length > 1) return "Solo una columna de firma en la tabla de registro.";
+  }
+  if(!d.criterios.grupos.length && !d.registro) return "Agregue criterios o una tabla de registro.";
   for(const g of d.criterios.grupos){
     if(!T(g.nombre, 3, 50)) return "Cada grupo necesita un nombre (3 a 50 caracteres).";
     if(!g.items.length) return "El grupo «" + g.nombre + "» no tiene criterios.";
@@ -284,8 +326,10 @@ function validaEd(E){
   }
   const R = d.resultado;
   if(R.modo === "texto"){ if(!T(R.titulo, 3, 60)) return "Escriba el título del campo de resultado."; }
-  else if(!(R.cortes.sat > 0 && R.cortes.sat <= 100 && R.cortes.ace > 0 && R.cortes.ace < R.cortes.sat)) return "El porcentaje aceptable debe ser menor que el satisfactorio (máximo 100).";
-  if(!T(d.firmas.insp, 3, 60) || !T(d.firmas.resp, 3, 60)) return "Escriba los títulos de las dos firmas.";
+  else if(R.modo === "porcentaje" && !d.criterios.grupos.length) return "El % de cumplimiento necesita criterios: elija «Texto» o «Sin resultado».";
+  else if(R.modo === "porcentaje" && !(R.cortes.sat > 0 && R.cortes.sat <= 100 && R.cortes.ace > 0 && R.cortes.ace < R.cortes.sat)) return "El porcentaje aceptable debe ser menor que el satisfactorio (máximo 100).";
+  if(!T(d.firmas.insp, 3, 60)) return "Escriba el título de la firma 1 (3 a 60 caracteres).";
+  if(String(d.firmas.resp || "").trim() && !T(d.firmas.resp, 3, 60)) return "El título de la firma 2 debe tener de 3 a 60 caracteres (o déjelo vacío).";
   if(String(E.motivo || "").trim().length < 5) return "Escriba el motivo del cambio (mínimo 5 letras).";
   return "";
 }
@@ -392,12 +436,41 @@ document.addEventListener("click", async ev => {
   else if(a === "grp-agrega") d.criterios.grupos.push({nombre:"", items:[{t:"", h:"Otro", auto:""}]});
   else if(a === "grp-sube") mueve(d.criterios.grupos, i, -1);
   else if(a === "grp-baja") mueve(d.criterios.grupos, i, 1);
-  else if(a === "grp-quita"){ if(d.criterios.grupos.length < 2) return toast("El formato necesita al menos un grupo."); if(!confirm("¿Quitar el grupo «" + (d.criterios.grupos[i].nombre || "sin nombre") + "» con sus criterios?")) return; d.criterios.grupos.splice(i, 1); }
+  else if(a === "grp-quita"){ if(d.criterios.grupos.length < 2 && !d.registro) return toast("El formato necesita al menos un grupo (o una tabla de registro)."); if(!confirm("¿Quitar el grupo «" + (d.criterios.grupos[i].nombre || "sin nombre") + "» con sus criterios?")) return; d.criterios.grupos.splice(i, 1); if(!d.criterios.grupos.length && d.resultado.modo === "porcentaje") d.resultado = {modo:"ninguno"}; }
   else if(a === "it-agrega") d.criterios.grupos[g].items.push({t:"", h:"Otro", auto:""});
   else if(a === "it-sube") mueve(d.criterios.grupos[g].items, i, -1);
   else if(a === "it-baja") mueve(d.criterios.grupos[g].items, i, 1);
   else if(a === "it-quita"){ if(d.criterios.grupos[g].items.length < 2) return toast("Cada grupo necesita al menos un criterio (o quite el grupo)."); d.criterios.grupos[g].items.splice(i, 1); }
-  else if(a === "res-pct"){ if(d.resultado.modo === "texto") d.resultado = {modo:"porcentaje", cortes:{sat:90, ace:70}}; }
+  else if(a === "res-pct"){ if(d.resultado.modo !== "porcentaje") d.resultado = {modo:"porcentaje", cortes:{sat:90, ace:70}}; }
+  else if(a === "res-nin") d.resultado = {modo:"ninguno"};
+  else if(a === "datos-usa"){
+    if(d.datos){ if(!confirm("¿Volver al campo Área de siempre? Se quitan los campos propios.")){ k.checked = true; return; } d.datos = null; }
+    else d.datos = [{k:claveNueva(), t:"Área", tipo:"area", opciones:[], req:true}];
+  }
+  else if(a === "dt-agrega") d.datos.push({k:claveNueva(), t:"", tipo:"texto", opciones:[], req:true});
+  else if(a === "dt-sube") mueve(d.datos, i, -1);
+  else if(a === "dt-baja") mueve(d.datos, i, 1);
+  else if(a === "dt-quita"){ d.datos.splice(i, 1); if(!d.datos.length) d.datos = null; }
+  else if(a === "dt-req"){ d.datos[i].req = k.checked; guardaLocal(); return; }
+  else if(a === "registro-usa"){
+    if(d.registro){
+      if(!d.criterios.grupos.length) return (k.checked = true, toast("El formato necesita criterios o una tabla de registro."));
+      if(!confirm("¿Quitar la tabla de registro?")){ k.checked = true; return; } d.registro = null;
+    }
+    else d.registro = {titulo:"Registro", nota:"", max:30, columnas:[{k:claveNueva(), t:"Apellidos y nombres", tipo:"texto", opciones:[], req:true}, {k:claveNueva(), t:"Firma", tipo:"firma", opciones:[], req:true}]};
+  }
+  else if(a === "rc-agrega") d.registro.columnas.push({k:claveNueva(), t:"", tipo:"texto", opciones:[], req:true});
+  else if(a === "rc-sube") mueve(d.registro.columnas, i, -1);
+  else if(a === "rc-baja") mueve(d.registro.columnas, i, 1);
+  else if(a === "rc-quita"){ if(d.registro.columnas.length < 2) return toast("La tabla necesita al menos una columna."); d.registro.columnas.splice(i, 1); }
+  else if(a === "rc-req"){ d.registro.columnas[i].req = k.checked; guardaLocal(); return; }
+  else if(a === "criterios-usa"){
+    if(d.criterios.grupos.length){
+      if(!confirm("¿Quitar todos los criterios? El formato quedará solo como registro.")){ k.checked = true; return; }
+      d.criterios.grupos = []; if(d.resultado.modo === "porcentaje") d.resultado = {modo:"ninguno"};
+      d.criterios.grupos.forEach(x => x.items.forEach(it => it.auto = ""));
+    } else d.criterios.grupos = [{nombre:"Criterios de verificación", items:[{t:"", h:"Otro", auto:""}]}];
+  }
   else if(a === "res-txt"){ if(d.resultado.modo !== "texto") d.resultado = {modo:"texto", titulo:"Resultados de la inspección"}; }
   else return;
   S.err = ""; guardaLocal(); pintaEditor();
@@ -439,7 +512,7 @@ document.addEventListener("change", async ev => {
     S.P.nombre = f.name; S.err = ""; return pintaSubir();
   }
   if(!S.E) return;
-  if(ev.target.dataset.dcF) return campo(ev.target.dataset.dcF, ev.target.value);
+  if(ev.target.dataset.dcF){ campo(ev.target.dataset.dcF, ev.target.value); if(/\.tipo$/.test(ev.target.dataset.dcF)) pintaEditor(); return; }
   if(ev.target.dataset.dcAuto){                             // criterio calculado con la tabla de puntos (uno o ninguno)
     const v = ev.target.value, G = S.E.def.criterios.grupos; G.forEach(x => x.items.forEach(it => it.auto = ""));
     if(v){ const [gi, ii] = v.split(".").map(Number); G[gi].items[ii].auto = "puntos"; }

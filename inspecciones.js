@@ -13,6 +13,8 @@ const ERR = {
   planta_bloqueada:"Esta planta apunta a una hoja distinta de la copia de prueba. Revise la pestaña Plantas.",
   criterios_invalidos:"Los criterios no coinciden con la versión del formato. Descarte este borrador y empiece una inspección nueva.",
   formato_invalido:"La versión del formato de este borrador no está aprobada. Descarte el borrador y empiece una inspección nueva.",
+  dato_invalido:"Revise un dato general: el valor no es válido.", dato_requerido:"Falta completar un dato general.",
+  registro_vacio:"Agregue al menos una fila en la tabla.", registro_invalido:"Revise la tabla: hay un valor no válido.", registro_requerido:"Falta completar un dato de la tabla.",
   resultado_invalido:"Escriba los resultados de la inspección (mínimo 10 letras).", nc_invalida:"Una no conformidad no está completa (observación y foto).",
   id_invalido:"La inspección no es válida. Vuelva a empezar.", permiso:"No tiene permiso para esta acción.",
   clave:"El servidor no reconoce esta acción. Falta actualizar el script (Code.gs, ControlDoc.gs e Inspecciones.gs) y publicar una nueva versión."
@@ -52,6 +54,7 @@ st.textContent = `
 .in-res b{font-size:22px;color:var(--brown)}
 .in-card .in{width:100%;box-sizing:border-box}
 .in-fp{border:1.5px dashed var(--taupe);border-radius:10px;background:#fff;touch-action:none;width:100%;height:130px;display:block}
+.in-fp-s{height:100px}
 .in-fb{display:flex;justify-content:space-between;align-items:center;margin:4px 0 12px;font-size:12.5px;color:var(--gray)}
 .insp-printarea{display:none}.insp-pdfw{position:absolute;left:-99999px;top:0;width:1122px;background:#fff}
 @media print{.insp-printarea{display:block}.insp-printarea .fi{zoom:.86}body>*:not(.insp-printarea){display:none!important}@page{size:A4 landscape;margin:8mm}}
@@ -117,13 +120,32 @@ function porcentaje(F){
   return (c + nc) ? Math.round(1000 * c / (c + nc)) / 10 : null;
 }
 const calif = (p, cortes) => p === null ? "" : p >= cortes.sat ? "Satisfactorio" : p >= cortes.ace ? "Aceptable con acciones" : "No satisfactorio";
-function pasos(def){ return [["datos","Datos de la inspección"]].concat(def.puntos ? [["puntos", def.puntos.titulo]] : [], [["criterios","Criterios"], ["resultado","Resultado"], ["firmas","Firmas"]]); }
+function pasos(def){
+  return [["datos", def.datos ? "Datos generales" : "Datos de la inspección"]].concat(def.puntos ? [["puntos", def.puntos.titulo]] : [], def.registro ? [["registro", def.registro.titulo]] : [],
+    items(def).length ? [["criterios","Criterios"]] : [], def.resultado.modo !== "ninguno" ? [["resultado","Resultado"]] : [], [["firmas","Firmas"]]);
+}
+const conArea = def => !def.datos || def.datos.some(c => c.tipo === "area");
+const campoArea = def => def.datos ? def.datos.filter(c => c.tipo === "area")[0] : null;
+const filaVacia = def => { const o = {}; def.registro.columnas.forEach(c => o[c.k] = ""); return o; };
+const fmtValor = (c, v) => !v ? "" : c.tipo === "fecha" ? fecha(v) : v;
+// control de un campo según su tipo (datos generales y celdas de la tabla de registro)
+function control(c, v, attr){
+  const a = `class="in" ${attr} autocomplete="off"`;
+  if(c.tipo === "lista") return `<select ${a}><option value="">Elija…</option>${c.opciones.map(o => `<option ${o === v ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+  if(c.tipo === "sino") return `<select ${a}><option value="">Elija…</option>${["Sí","No"].map(o => `<option ${o === v ? "selected" : ""}>${o}</option>`).join("")}</select>`;
+  if(c.tipo === "area") return `<select ${a}><option value="">Elija el área…</option>${(S.areas || []).map(x => `<option ${x.nombre === v ? "selected" : ""}>${esc(x.nombre)}</option>`).join("")}</select>`;
+  if(c.tipo === "fecha") return `<input type="date" ${a} value="${esc(v)}">`;
+  if(c.tipo === "hora") return `<input type="time" ${a} value="${esc(v)}">`;
+  if(c.tipo === "numero") return `<input type="number" inputmode="decimal" step="any" ${a} value="${esc(v)}">`;
+  return `<input ${a} maxlength="200" value="${esc(v)}">`;
+}
 
 /* ---------- estado y borrador ---------- */
 function nuevoPunto(def, i){ const c = {}; colsDe(def).forEach(x => c[x.k] = ""); return {nombre:"Punto " + i, c:c, obs:""}; }   // nada viene marcado: se marca punto por punto
 function nuevoForm(fmt){
   const crit = {}; items(fmt.def).forEach(it => crit[it.n] = {r:"", obs:"", fotos:[], accion:"", resp:"", plazo:""});
-  return {id:"insp-" + uuid(), fmt:fmt, area:"", puntos:fmt.def.puntos ? [nuevoPunto(fmt.def, 1)] : [], crit:crit, respNombre:"", respCargo:"", resultadoTexto:"",
+  const datos = {}; (fmt.def.datos || []).forEach(c => datos[c.k] = "");
+  return {id:"insp-" + uuid(), fmt:fmt, area:"", datos:datos, registro:fmt.def.registro ? [filaVacia(fmt.def)] : [], puntos:fmt.def.puntos ? [nuevoPunto(fmt.def, 1)] : [], crit:crit, respNombre:"", respCargo:"", resultadoTexto:"",
     inspCargo:(function(){ try{ return localStorage.getItem("insp_cargo:" + (SES && SES.usuario)) || "Medio Ambiente"; }catch(e){ return "Medio Ambiente"; } })(), firmaInsp:"", firmaResp:"", t0:hoy() + " " + hora()};
 }
 function guardaBorrador(){ try{ if(S.F) localStorage.setItem(BORR + ":" + (SES && SES.usuario), JSON.stringify(S.F)); }catch(e){} }   // las fotos pueden pesar: si no cabe, no pasa nada
@@ -132,6 +154,7 @@ function leeBorrador(){
     const t = localStorage.getItem(BORR + ":" + (SES && SES.usuario)); if(!t) return null;
     const b = JSON.parse(t); if(!b || !b.fmt || !b.fmt.def) return null;   // el borrador guarda su versión del formato
     ["respNombre","respCargo","resultadoTexto","firmaInsp","firmaResp"].forEach(k => { if(b[k] == null) b[k] = ""; });
+    if(!b.datos) b.datos = {}; if(!b.registro) b.registro = [];
     return b;
   }catch(e){ return null; }
 }
@@ -161,7 +184,7 @@ function repinta(){
   if(S.vista === "elegir") return pintaElegir();
   pintaLista();
 }
-const resumen = i => i.resultadoTexto ? "Resultado en texto" : (i.pct === "" ? "s/d" : i.pct + " %");
+const resumen = i => i.resultadoTexto ? "Resultado en texto" : i.pct !== "" ? i.pct + " %" : (i.registro || []).length ? i.registro.length + " fila(s)" : "s/d";
 function filtradas(){
   const q = S.q, t = q.txt.trim().toLowerCase();
   return (S.lista || []).filter(i => (!t || (i.area + " " + i.inspectorNombre + " " + i.respNombre + " " + (i.codigo || "")).toLowerCase().indexOf(t) >= 0)
@@ -199,9 +222,11 @@ function pintaDetalle(){
   if(!f){ box().innerHTML = `<div class="card muted">Cargando…</div>`; fmtDe(i.versionId).then(() => { if(S.vista === "detalle" && S.sel === i.id) pintaDetalle(); }).catch(() => { box().innerHTML = `<div class="in-top"><button class="btn sec sm" data-in="lista">← Historial</button></div><div class="err">No se pudo cargar la versión del formato de esta inspección. Revise su señal.</div>`; }); return; }
   const crit = {}; (i.criterios || []).forEach(c => crit[c.n] = c);
   box().innerHTML = `<div class="in-top"><button class="btn sec sm" data-in="lista">← Historial</button></div>${S.fin ? `<div class="in-ok">✔ Inspección terminada y registrada</div>` : ""}<div class="in-top"><button class="btn" style="flex:1" data-in="descargar">Descargar PDF</button><button class="btn sec" style="flex:1" data-in="pdf">Compartir</button></div><div class="in-top"><button class="btn sec" style="flex:1" data-in="imprimir">Imprimir</button></div>` +
-    `<div class="in-res ${i.resultadoTexto ? "" : claseCal(i.calificacion)}"><div>${esc(i.area)} · ${fecha(i.fecha)} ${esc(i.hora)}</div>${i.resultadoTexto ? `<div class="in-txt">${esc(i.resultadoTexto)}</div>` : `<b>${esc(i.pct === "" ? "s/d" : i.pct + " %")}</b> ${esc(i.calificacion)}`}</div>` +
-    `<div class="hz-kv"><span>Formato</span><span>${esc(f.codigo)} · versión ${esc(f.version)}</span><span>Inspector</span><span>${esc(i.inspectorNombre)}</span><span>Responsable</span><span>${esc(i.respNombre)}${i.respCargo ? " · " + esc(i.respCargo) : ""}</span><span>Hallazgos</span><span>${(i.hallazgos || []).length ? esc(i.hallazgos.join(", ")) : "Ninguno"}</span></div>` +
-    `<div class="in-card"><h3>Criterios</h3>${items(f.def).map(it => { const c = crit[it.n] || {r:""}; return `<div class="in-crit"><span class="n">${it.n}.</span> ${esc(it.t)} — <b>${esc(c.r === "NA" ? "N/A" : c.r)}</b>${c.obs ? `<div class="s">${esc(c.obs)}</div>` : ""}${c.accion ? `<div class="s">Acción: ${esc(c.accion)} · Responsable: ${esc(c.responsable || "")} · Plazo: ${esc(fecha(c.plazo))}</div>` : ""}</div>`; }).join("")}</div>`;
+    `<div class="in-res ${i.resultadoTexto ? "" : claseCal(i.calificacion)}"><div>${esc(i.area)} · ${fecha(i.fecha)} ${esc(i.hora)}</div>${i.resultadoTexto ? `<div class="in-txt">${esc(i.resultadoTexto)}</div>` : f.def.resultado.modo === "ninguno" ? `<b style="font-size:16px">${esc(resumen(i))}</b>` : `<b>${esc(i.pct === "" ? "s/d" : i.pct + " %")}</b> ${esc(i.calificacion)}`}</div>` +
+    `<div class="hz-kv"><span>Formato</span><span>${esc(f.codigo)} · versión ${esc(f.version)}</span><span>Registrado por</span><span>${esc(i.inspectorNombre)}</span>${f.def.firmas.resp ? `<span>${esc(f.def.firmas.resp)}</span><span>${esc(i.respNombre)}${i.respCargo ? " · " + esc(i.respCargo) : ""}</span>` : ""}<span>Hallazgos</span><span>${(i.hallazgos || []).length ? esc(i.hallazgos.join(", ")) : "Ninguno"}</span></div>` +
+    (i.datos && f.def.datos ? `<div class="in-card"><h3>Datos generales</h3><div class="hz-kv">${f.def.datos.map(c => `<span>${esc(c.t)}</span><span>${esc(fmtValor(c, i.datos[c.k])) || "—"}</span>`).join("")}</div></div>` : "") +
+    (f.def.registro ? `<div class="in-card"><h3>${esc(f.def.registro.titulo)}</h3>${(i.registro || []).map((r, k) => `<div class="in-crit"><span class="n">${k + 1}.</span> ${f.def.registro.columnas.filter(c => c.tipo !== "firma").map(c => esc(fmtValor(c, r[c.k])) || "—").join(" · ")}${f.def.registro.columnas.some(c => c.tipo === "firma" && r[c.k]) ? " · ✍ firmado" : ""}</div>`).join("") || `<p class="s">Sin filas.</p>`}</div>` : "") +
+    (items(f.def).length ? `<div class="in-card"><h3>Criterios</h3>${items(f.def).map(it => { const c = crit[it.n] || {r:""}; return `<div class="in-crit"><span class="n">${it.n}.</span> ${esc(it.t)} — <b>${esc(c.r === "NA" ? "N/A" : c.r)}</b>${c.obs ? `<div class="s">${esc(c.obs)}</div>` : ""}${c.accion ? `<div class="s">Acción: ${esc(c.accion)} · Responsable: ${esc(c.responsable || "")} · Plazo: ${esc(fecha(c.plazo))}</div>` : ""}</div>`; }).join("")}</div>` : "");
 }
 const sgCell = (i, k, val) => `<span class="in-sg">${RESP.map(([v]) => `<button type="button" data-in-c="${i}|${k}" data-v="${v}" class="${v}${val === v ? " on" : ""}">${v === "NA" ? "N/A" : v}</button>`).join("")}</span>`;
 
@@ -210,7 +235,11 @@ function pintaForm(){
   const def = F.fmt.def, areas = S.areas || [], P = pasos(def), paso = Math.min(Math.max(S.paso || 0, 0), P.length - 1), id = P[paso][0];
   const tit = `${LET[paso]}. ${esc(P[paso][1])}`;
   let sec = "";
-  if(id === "datos") sec = `<div class="in-card"><h3>${tit}</h3>
+  const auto3 = `<div class="in-g"><div><label class="f">Fecha</label><div class="in-ro">${esc(fecha(F.t0.slice(0,10)))}</div></div><div><label class="f">Hora</label><div class="in-ro">${esc(F.t0.slice(11,16))}</div></div><div class="in-g-w"><label class="f">Inspector</label><div class="in-ro">${esc(SES ? SES.nombre : "")}</div></div></div>`;
+  if(id === "datos" && def.datos) sec = `<div class="in-card"><h3>${tit}</h3>` +
+    def.datos.map(c => `<label class="f">${esc(c.t)}${c.req ? "" : ` <span class="s" style="font-weight:normal">(opcional)</span>`}</label>${control(c, F.datos[c.k] || "", `data-in-d="${c.k}"`)}`).join("") +
+    (campoArea(def) && !(S.areas || []).length ? `<p class="s">Cargando áreas…</p>` : "") + auto3 + `</div>`;
+  else if(id === "datos") sec = `<div class="in-card"><h3>${tit}</h3>
     <label class="f" for="in-area">Área</label><select id="in-area" class="in"><option value="">Elija el área…</option>${areas.map(a => `<option ${a.nombre === F.area ? "selected" : ""}>${esc(a.nombre)}</option>`).join("")}</select>
     ${areas.length ? "" : `<p class="s">Cargando áreas…</p>`}
     <div class="in-g"><div><label class="f">Fecha</label><div class="in-ro">${esc(fecha(F.t0.slice(0,10)))}</div></div><div><label class="f">Hora</label><div class="in-ro">${esc(F.t0.slice(11,16))}</div></div><div class="in-g-w"><label class="f">Inspector</label><div class="in-ro">${esc(SES ? SES.nombre : "")}</div></div></div></div>`;
@@ -218,15 +247,24 @@ function pintaForm(){
     F.puntos.map((pt, i) => `<div class="in-pt"><div style="display:flex;gap:6px"><input class="in" data-in-pn="${i}" value="${esc(pt.nombre)}" maxlength="40" style="flex:1;width:auto;min-width:0"><button type="button" class="btn sec sm" data-in-pq="${i}">Quitar</button></div>` +
       colsDe(def).map(c => `<div class="c"><span class="in-lb"><i class="in-dot" ${c.color ? `style="background:${esc(c.color)}"` : `style="visibility:hidden"`}></i>${esc(c.t)}</span>${sgCell(i, c.k, pt.c[c.k])}</div>`).join("") + `</div>`).join("") +
     (F.puntos.length < def.puntos.max ? `<button type="button" class="btn sec sm" data-in="punto">＋ Agregar punto</button>` : "") + `</div>`;
+  else if(id === "registro"){
+    const R = def.registro;
+    sec = `<div class="in-card"><h3>${tit}</h3>${R.nota ? `<p class="s">${esc(R.nota)}</p>` : ""}` +
+      F.registro.map((fl, i) => `<div class="in-pt"><div style="display:flex;justify-content:space-between;align-items:center"><b style="color:var(--brown)">${i + 1}.</b>${F.registro.length > 1 ? `<button type="button" class="btn sec sm" data-in-gq="${i}">Quitar</button>` : ""}</div>` +
+        R.columnas.map(c => `<label class="f">${esc(c.t)}${c.req ? "" : ` <span class="s" style="font-weight:normal">(opcional)</span>`}</label>` + (c.tipo === "firma"
+          ? `<canvas class="in-fp in-fp-s" data-in-fc="g:${i}:${c.k}"></canvas><div class="in-fb"><span>Firme con el dedo</span><button type="button" class="btn sec sm" data-in-fl="g:${i}:${c.k}">Borrar firma</button></div>`
+          : control(c, fl[c.k] || "", `data-in-g="${i}|${c.k}"`))).join("") + `</div>`).join("") +
+      (F.registro.length < R.max ? `<button type="button" class="btn sec sm" data-in="fila">＋ Agregar fila</button>` : `<p class="s">Máximo ${R.max} filas.</p>`) + `</div>`;
+  }
   else if(id === "criterios") sec = `<div class="in-card"><h3>${tit}</h3>` + def.criterios.grupos.map(g =>
     `<p class="s" style="margin-top:10px"><b>${esc(g.nombre)}</b></p>` + g.items.map(it => {
       const n = it.n, c = F.crit[n], r = resultadoCrit(F, n), auto = it.auto === "puntos";
       return `<div class="in-crit"><div class="t"><span class="n">${n}.</span> ${esc(it.t)}</div>` +
         (auto ? `<span class="hz-b ${r === "C" ? "cer" : r === "NC" ? "venc" : "abi"}">${r === "" ? "Pendiente: se calcula con la tabla de puntos" : (r === "NA" ? "N/A" : r) + " (automático)"}</span>` : `<span class="in-sg">${RESP.map(([k]) => `<button type="button" data-in-r="${n}|${k}" class="${k}${c.r === k ? " on" : ""}">${k === "NA" ? "N/A" : k}</button>`).join("")}</span>`) +
         (r === "NC" ? `<div class="in-nc"><label class="f">Observación</label><textarea class="in" data-in-o="${n}" maxlength="300" placeholder="¿Qué se observó? (mínimo 5 letras)">${esc(c.obs)}</textarea>
-          <label class="f">Fotos con la observación marcada</label>
+          ${conArea(def) ? `<label class="f">Fotos con la observación marcada</label>
           <div class="hz-thumbs">${c.fotos.map((f, fi) => `<div class="hz-thumb"><img src="${f}" alt=""><button type="button" data-in-fq="${n}|${fi}">✕</button></div>`).join("")}</div>
-          ${c.fotos.length < MAX_FOTOS ? `<label class="btn sec sm" style="display:inline-block">📷 Foto con la marca<input type="file" accept="image/*" capture="environment" data-in-f="${n}" hidden></label>` : ""}
+          ${c.fotos.length < MAX_FOTOS ? `<label class="btn sec sm" style="display:inline-block">📷 Foto con la marca<input type="file" accept="image/*" capture="environment" data-in-f="${n}" hidden></label>` : ""}` : ""}
           <label class="f">Acción correctiva</label><textarea class="in" data-in-a="${n}" maxlength="300" placeholder="¿Qué se hará para corregirlo? (mínimo 5 letras)">${esc(c.accion || "")}</textarea>
           <label class="f">Responsable de la acción</label><input class="in" data-in-rs="${n}" maxlength="60" autocomplete="off" placeholder="Nombre y apellidos" value="${esc(c.resp || "")}">
           <label class="f">Plazo</label><input class="in" type="date" data-in-pz="${n}" min="${hoy()}" max="${masDias(hoy(), 365)}" value="${esc(c.plazo || "")}"></div>` : "") + `</div>`;
@@ -244,18 +282,18 @@ function pintaForm(){
       <label class="f" for="in-ic">Cargo</label><input id="in-ic" class="in" autocomplete="off" maxlength="40" value="${esc(F.inspCargo)}">
       <label class="f">Firma</label>
       <canvas class="in-fp" data-in-fc="insp"></canvas><div class="in-fb"><span>Firme con el dedo</span><button type="button" class="btn sec sm" data-in-fl="insp">Borrar firma</button></div></div>
-    <div class="in-pt"><p class="s" style="margin:0 0 4px"><b>${esc(def.firmas.resp)}</b></p>
+    ${def.firmas.resp ? `<div class="in-pt"><p class="s" style="margin:0 0 4px"><b>${esc(def.firmas.resp)}</b></p>
       <label class="f" for="in-rn">Nombres y apellidos</label><input id="in-rn" class="in" autocomplete="off" maxlength="60" placeholder="Jefe, líder o encargado" value="${esc(F.respNombre)}">
       <label class="f" for="in-rc">Cargo</label><input id="in-rc" class="in" autocomplete="off" maxlength="40" value="${esc(F.respCargo)}">
       <label class="f">Firma</label>
-      <canvas class="in-fp" data-in-fc="resp"></canvas><div class="in-fb"><span>El responsable firma aquí</span><button type="button" class="btn sec sm" data-in-fl="resp">Borrar firma</button></div></div>
+      <canvas class="in-fp" data-in-fc="resp"></canvas><div class="in-fb"><span>El responsable firma aquí</span><button type="button" class="btn sec sm" data-in-fl="resp">Borrar firma</button></div></div>` : ""}
   </div>`;
   const ult = paso === P.length - 1, pct = Math.round(100 * (paso + 1) / P.length);
   const prog = `<div class="in-prog"><span>Paso ${paso + 1} de ${P.length} · ${esc(P[paso][1])}</span><div class="in-bar"><i style="width:${pct}%"></i></div></div>`;
   const nav = `<div class="err" id="in-err">${esc(S.err)}</div><div class="in-top"><button class="btn sec" style="flex:1" data-in="salir">Guardar borrador y salir</button></div>
     <div class="in-foot">${prog}<div class="in-nav">${paso > 0 ? `<button class="btn sec" data-in="atras">← Atrás</button>` : `<span></span>`}${!ult ? `<button class="btn" data-in="siguiente">Siguiente →</button>` : `<button class="btn" data-in="enviar" ${S.enviando ? "disabled" : ""}>${S.enviando ? "Terminando…" : "Terminar inspección"}</button>`}</div></div>`;
   box().innerHTML = sec + nav;
-  if(id === "firmas") iniciaFirmas();
+  if(id === "firmas" || id === "registro") iniciaFirmas();
 }
 function leeCampos(){
   const F = S.F; if(!F) return;
@@ -265,6 +303,9 @@ function leeCampos(){
   if(g("in-rc")) F.respCargo = g("in-rc").value;
   if(g("in-ic")) F.inspCargo = g("in-ic").value;
   if(g("in-rt")) F.resultadoTexto = g("in-rt").value;
+  box().querySelectorAll("[data-in-d]").forEach(e => { F.datos[e.dataset.inD] = e.value; });
+  box().querySelectorAll("[data-in-g]").forEach(e => { const [i, k] = e.dataset.inG.split("|"); if(F.registro[+i]) F.registro[+i][k] = e.value; });
+  const ca = campoArea(F.fmt.def); if(ca) F.area = F.datos[ca.k] || "";
   box().querySelectorAll("[data-in-pn]").forEach(e => { F.puntos[+e.dataset.inPn].nombre = e.value; });
   box().querySelectorAll("[data-in-o]").forEach(e => { F.crit[+e.dataset.inO].obs = e.value; });
   box().querySelectorAll("[data-in-a]").forEach(e => { F.crit[+e.dataset.inA].accion = e.value; });
@@ -272,7 +313,7 @@ function leeCampos(){
   box().querySelectorAll("[data-in-pz]").forEach(e => { F.crit[+e.dataset.inPz].plazo = e.value; });
 }
 // en qué paso está lo que falta (según el mensaje de validación)
-const pasoDe = m => /^Elija el área/.test(m) ? "datos" : /^(Cada punto|Punto «)/.test(m) ? "puntos" : /^Criterio/.test(m) ? "criterios" : /^Escriba los resultados/.test(m) ? "resultado" : "firmas";
+const pasoDe = m => /^(Elija el área|Complete «|Revise «)/.test(m) ? "datos" : /^(Fila \d|Agregue al menos)/.test(m) ? "registro" : /^(Cada punto|Punto «)/.test(m) ? "puntos" : /^Criterio/.test(m) ? "criterios" : /^Escriba los resultados/.test(m) ? "resultado" : "firmas";
 const idxPaso = (F, id) => Math.max(0, pasos(F.fmt.def).map(p => p[0]).indexOf(id));
 function irA(sel){
   const el = sel && box().querySelector(sel);
@@ -280,7 +321,20 @@ function irA(sel){
 }
 function validaLocal(F){
   const def = F.fmt.def;
-  if(!F.area) return "Elija el área.";
+  if(!def.datos){ if(!F.area) return "Elija el área."; }
+  else for(const c of def.datos){
+    const v = String(F.datos[c.k] || "").trim();
+    if(c.req && !v){ S.falta = `[data-in-d="${c.k}"]`; return "Complete «" + c.t + "»."; }
+    if(v && c.tipo === "numero" && !isFinite(Number(v.replace(",", ".")))){ S.falta = `[data-in-d="${c.k}"]`; return "Revise «" + c.t + "»: debe ser un número."; }
+  }
+  if(def.registro){
+    if(!F.registro.length) return "Agregue al menos una fila.";
+    for(let i = 0; i < F.registro.length; i++) for(const c of def.registro.columnas){
+      const v = String(F.registro[i][c.k] || "").trim();
+      if(c.req && !v){ S.falta = c.tipo === "firma" ? `[data-in-fc="g:${i}:${c.k}"]` : `[data-in-g="${i}|${c.k}"]`; return "Fila " + (i + 1) + ": " + (c.tipo === "firma" ? "falta la firma." : "complete «" + c.t + "»."); }
+      if(v && c.tipo === "numero" && !isFinite(Number(v.replace(",", ".")))){ S.falta = `[data-in-g="${i}|${c.k}"]`; return "Fila " + (i + 1) + ": «" + c.t + "» debe ser un número."; }
+    }
+  }
   if(F.puntos.some(p => !p.nombre.trim())) return "Cada punto necesita un nombre.";
   for(let i = 0; i < F.puntos.length; i++){
     const f = colsDe(def).filter(c => !F.puntos[i].c[c.k])[0];
@@ -295,12 +349,12 @@ function validaLocal(F){
     if((c.accion || "").trim().length < 5){ S.falta = `[data-in-a="${n}"]`; return "Criterio " + n + ": escriba la acción correctiva (mínimo 5 letras)."; }
     if((c.resp || "").trim().length < 3){ S.falta = `[data-in-rs="${n}"]`; return "Criterio " + n + ": escriba el responsable de la acción."; }
     if(!/^\d{4}-\d{2}-\d{2}$/.test(c.plazo || "") || c.plazo < hoy() || c.plazo > masDias(hoy(), 365)){ S.falta = `[data-in-pz="${n}"]`; return "Criterio " + n + ": elija un plazo desde hoy y hasta 365 días."; }
-    if(!c.fotos.length) return "Criterio " + n + ": agregue una foto con la observación marcada.";
+    if(conArea(def) && !c.fotos.length) return "Criterio " + n + ": agregue una foto con la observación marcada.";
   }
   if(def.resultado.modo === "texto" && (F.resultadoTexto || "").trim().length < 10){ S.falta = "#in-rt"; return "Escriba los resultados de la inspección (mínimo 10 letras)."; }
-  if(F.respNombre.trim().length < 3) return "Escriba el nombre del responsable del área.";
-  if(!F.firmaInsp) return "Falta la firma del inspector.";
-  if(!F.firmaResp) return "Falta la firma del responsable del área.";
+  if(def.firmas.resp && F.respNombre.trim().length < 3) return "Escriba el nombre de: " + def.firmas.resp + ".";
+  if(!F.firmaInsp) return "Falta la firma de: " + def.firmas.insp + ".";
+  if(def.firmas.resp && !F.firmaResp) return "Falta la firma de: " + def.firmas.resp + ".";
   return "";
 }
 async function enviar(){
@@ -312,12 +366,16 @@ async function enviar(){
   const criterios = items(F.fmt.def).map(it => { const n = it.n, r = resultadoCrit(F, n), c = F.crit[n]; return r === "NC" ? {n:n, r:r, obs:c.obs.trim(), accion:c.accion.trim(), responsable:c.resp.trim(), plazo:c.plazo, fotos:c.fotos} : {n:n, r:r}; });
   try{
     const j = await postJ({action:"inspeccion_guardar", id:F.id, versionId:F.fmt.versionId, area:F.area, respNombre:F.respNombre.trim(), respCargo:F.respCargo.trim(), inspectorCargo:F.inspCargo.trim(), firmaInsp:F.firmaInsp, firmaResp:F.firmaResp,
-      puntos:F.puntos.map(p => ({nombre:p.nombre.trim(), c:p.c, obs:p.obs || ""})), criterios:criterios, resultadoTexto:(F.resultadoTexto || "").trim()}, 120000);
+      puntos:F.puntos.map(p => ({nombre:p.nombre.trim(), c:p.c, obs:p.obs || ""})), criterios:criterios, resultadoTexto:(F.resultadoTexto || "").trim(),
+      datos:F.fmt.def.datos ? F.datos : null, registro:F.registro}, 180000);
     S.enviando = false;
     if(j && j.ok){ try{ localStorage.setItem("insp_cargo:" + (SES && SES.usuario), F.inspCargo.trim()); }catch(e){} borraBorrador(); const idNueva = F.id; S.defs[F.fmt.versionId] = F.fmt; S.F = null; S.vista = "lista"; S.lista = null; S.err = ""; toast("Inspección terminada" + (j.hallazgos && j.hallazgos.length ? " · " + j.hallazgos.length + " hallazgo(s) creados" : "")); pintaLista(); await carga();
       if((S.lista || []).some(x => x.id === idNueva)){ S.sel = idNueva; S.vista = "detalle"; S.fin = true; repinta(); window.scrollTo(0, 0); }
       return; }
-    S.err = (j && (j.error === "sesion" || j.error === "cambiar_clave")) ? "Su sesión venció. Ingrese de nuevo: lo escrito se conserva." : (j && j.error === "nc_invalida" && j.criterio ? "Criterio " + j.criterio + ": revise observación, foto, acción, responsable y plazo." : ERR[j && j.error] || "No se pudo guardar. Intente de nuevo.");
+    S.err = (j && (j.error === "sesion" || j.error === "cambiar_clave")) ? "Su sesión venció. Ingrese de nuevo: lo escrito se conserva."
+      : (j && /^dato_/.test(j.error) && j.campo) ? "Revise «" + j.campo + "»."
+      : (j && /^registro_(invalido|requerido)$/.test(j.error) && j.fila) ? "Fila " + j.fila + ": revise «" + j.campo + "»."
+      : (j && j.error === "nc_invalida" && j.criterio ? "Criterio " + j.criterio + ": revise observación, foto, acción, responsable y plazo." : ERR[j && j.error] || "No se pudo guardar. Intente de nuevo.");
   }catch(e){ S.enviando = false; S.err = "Sin señal o respuesta lenta. Su inspección sigue como borrador: intente de nuevo."; }
   if(/^Criterio/.test(S.err)) S.paso = idxPaso(F, "criterios");
   guardaBorrador(); pintaForm();
@@ -329,7 +387,8 @@ function iniciaFirmas(){
     const k = cv.dataset.inFc, w = cv.clientWidth || 320, h = cv.clientHeight || 130, r = Math.min(window.devicePixelRatio || 1, 2);
     cv.width = w * r; cv.height = h * r;
     const x = cv.getContext("2d"); x.scale(r, r); x.lineWidth = 2.2; x.lineCap = "round"; x.lineJoin = "round"; x.strokeStyle = "#111";
-    const guardada = k === "insp" ? S.F.firmaInsp : S.F.firmaResp;
+    const g = /^g:(\d+):(\w+)$/.exec(k);
+    const guardada = g ? (S.F.registro[+g[1]] || {})[g[2]] : k === "insp" ? S.F.firmaInsp : S.F.firmaResp;
     if(guardada){ const im = new Image(); im.onload = () => x.drawImage(im, 0, 0, w, h); im.src = guardada; }
     let dib = false, ult = null;
     const pos = e => { const b = cv.getBoundingClientRect(); return {x:e.clientX - b.left, y:e.clientY - b.top}; };
@@ -341,10 +400,13 @@ function iniciaFirmas(){
 }
 function guardaFirma(k, cv){
   // se reduce a 400 px de ancho y en PNG: pesa pocos KB y cabe en una celda de la hoja
-  const c2 = document.createElement("canvas"), w = 400, h = Math.round(400 * cv.height / cv.width); c2.width = w; c2.height = h;
+  const g = /^g:(\d+):(\w+)$/.exec(k), w = g ? 300 : 400;     // las firmas por fila, más chicas: son muchas
+  const c2 = document.createElement("canvas"), h = Math.round(w * cv.height / cv.width); c2.width = w; c2.height = h;
   const x = c2.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, w, h); x.drawImage(cv, 0, 0, w, h);
   const url = c2.toDataURL("image/png");
-  if(k === "insp") S.F.firmaInsp = url; else S.F.firmaResp = url;
+  if(g){ if(S.F.registro[+g[1]]) S.F.registro[+g[1]][g[2]] = url; }
+  else if(k === "insp") S.F.firmaInsp = url; else S.F.firmaResp = url;
+  if(/firma/.test(S.err)){ S.err = ""; const e = document.getElementById("in-err"); if(e) e.textContent = ""; }   // ya firmó: el aviso sobra
   guardaBorrador();
 }
 
@@ -368,27 +430,37 @@ function htmlFormato(i, f, fmt){
   let h = CSS_PDF + `<div class="fi">
   <table><tr><td rowspan="3" style="width:150px" class="c fi-lg"><img src="img/logo-formato.png" alt=""></td><td rowspan="3" class="t">${esc(def.titulo.toUpperCase())}</td><td>Código: <b>${esc(fmt.codigo)}</b></td></tr>
   <tr><td>Versión: <b>${esc(fmt.version)}</b></td></tr><tr><td>Fecha de aprobación: ${esc(fecha(fmt.fechaAprobacion))}</td></tr></table>
-  ${sec("Datos generales")}
-  <table><tr><td><b>PLANTA:</b> ${esc(CFG.PLANTA || "")}</td><td><b>FECHA:</b> ${esc(fecha(i.fecha))}</td></tr><tr><td><b>ÁREA INSPECCIONADA:</b> ${esc(i.area || "")}</td><td><b>HORA:</b> ${esc(i.hora || "")}</td></tr></table>`;
+  ${sec("Datos generales")}`;
+  if(def.datos){                                              // campos del formato, de dos en dos
+    const L = [["PLANTA", CFG.PLANTA || ""], ["FECHA", fecha(i.fecha)]].concat(def.datos.map(c => [c.t.toUpperCase(), fmtValor(c, (i.datos || {})[c.k])]), [["HORA", i.hora || ""]]);
+    let t = "<table>"; for(let k = 0; k < L.length; k += 2) t += `<tr><td><b>${esc(L[k][0])}:</b> ${esc(L[k][1] || "")}</td>${L[k + 1] ? `<td><b>${esc(L[k + 1][0])}:</b> ${esc(L[k + 1][1] || "")}</td>` : "<td></td>"}</tr>`;
+    h += t + "</table>";
+  } else h += `<table><tr><td><b>PLANTA:</b> ${esc(CFG.PLANTA || "")}</td><td><b>FECHA:</b> ${esc(fecha(i.fecha))}</td></tr><tr><td><b>ÁREA INSPECCIONADA:</b> ${esc(i.area || "")}</td><td><b>HORA:</b> ${esc(i.hora || "")}</td></tr></table>`;
   if(def.puntos){
     const C = def.puntos.columnas, pts = (i.puntos || []).slice(); while(pts.length < 3) pts.push(null);
     h += sec(def.puntos.titulo, def.puntos.nota ? "· " + esc(def.puntos.nota) : "") +
       `<table><tr><th>N°</th><th>PUNTO</th>${C.map(c => `<th>${c.color ? `<span class="sw" style="background:${esc(c.color)}"></span>` : ""}${esc(c.t.toUpperCase())}</th>`).join("")}<th>OBSERVACIONES</th></tr>` +
       pts.map((p, k) => p ? `<tr><td class="c">${k + 1}</td><td>${esc(p.nombre)}</td>${C.map(c => celda(p.c[c.k])).join("")}<td>${esc(p.obs || "")}</td></tr>` : `<tr><td class="c">${k + 1}</td><td></td>${C.map(() => "<td></td>").join("")}<td></td></tr>`).join("") + `</table>`;
   }
-  h += sec("Criterios de inspección y plan de acción") +
+  if(def.registro){
+    const C = def.registro.columnas, R = (i.registro || []).slice(), fl = (f && f.filas) || {}; while(R.length < 5) R.push(null);
+    h += sec(def.registro.titulo, def.registro.nota ? "· " + esc(def.registro.nota) : "") + `<table><tr><th style="width:26px">N°</th>${C.map(c => `<th>${esc(c.t.toUpperCase())}</th>`).join("")}</tr>` +
+      R.map((r, k) => `<tr><td class="c">${k + 1}</td>${C.map(c => !r ? "<td></td>" : c.tipo === "firma" ? `<td class="c" style="height:30px">${fl[k] ? `<img src="${fl[k]}" alt="" style="max-height:28px;max-width:110px">` : ""}</td>` : `<td${c.tipo === "numero" || c.tipo === "fecha" || c.tipo === "hora" || c.tipo === "sino" ? ' class="c"' : ""}>${esc(fmtValor(c, r[c.k]))}</td>`).join("")}</tr>`).join("") + `</table>`;
+  }
+  if(items(def).length) h += sec("Criterios de inspección y plan de acción") +
     `<table><tr><th>N°</th><th>CRITERIO</th><th>RESULTADO</th><th>OBSERVACIÓN / HALLAZGO</th><th>ACCIÓN CORRECTIVA</th><th>RESPONSABLE</th><th>PLAZO</th></tr>` +
     def.criterios.grupos.map(g => `<tr><td class="g" colspan="7">${esc(g.nombre.toUpperCase())}</td></tr>` + g.items.map(it => {
       const c = crit[it.n] || {r:"", obs:""};
       return `<tr><td class="c">${it.n}</td><td>${esc(it.t)}</td>${celda(c.r)}<td>${esc(c.obs || "")}</td><td>${esc(c.accion || "")}</td><td>${esc(c.responsable || "")}</td><td class="c">${c.plazo ? esc(fecha(c.plazo)) : ""}</td></tr>`;
     }).join("")).join("") + `</table>`;
-  h += sec("Resultado") + (def.resultado.modo === "texto"
+  if(def.resultado.modo !== "ninguno") h += sec("Resultado") + (def.resultado.modo === "texto"
     ? `<table><tr><td><b>${esc(def.resultado.titulo.toUpperCase())}:</b><div class="tx">${esc(i.resultadoTexto || "")}</div></td></tr></table>`
     : `<table><tr><td><b>% DE CONFORMIDAD:</b> ${i.pct === "" || i.pct == null ? "—" : esc(i.pct) + " %"}</td><td><b>CALIFICACIÓN:</b> ${esc(i.calificacion || "—")}</td></tr></table>`);
-  h += sec("Firmas") + `<table><tr><th>${esc(def.firmas.insp.toUpperCase())}</th><th>${esc(def.firmas.resp.toUpperCase())}</th></tr>
-  <tr><td>Nombres y apellidos: ${esc(i.inspectorNombre || "")}</td><td>Nombres y apellidos: ${esc(i.respNombre || "")}</td></tr>
-  <tr><td>Cargo: ${esc(i.inspectorCargo || "")}</td><td>Cargo: ${esc(i.respCargo || "")}</td></tr>
-  <tr><td class="fm">Firma: ${f && f.firmaInsp ? `<img src="${f.firmaInsp}" alt="">` : ""}</td><td class="fm">Firma: ${f && f.firmaResp ? `<img src="${f.firmaResp}" alt="">` : ""}</td></tr></table></div>`;
+  const dos = !!def.firmas.resp, c2 = x => dos ? x : "";
+  h += sec("Firmas") + `<table${dos ? "" : ' style="width:50%"'}><tr><th>${esc(def.firmas.insp.toUpperCase())}</th>${c2(`<th>${esc(def.firmas.resp.toUpperCase())}</th>`)}</tr>
+  <tr><td>Nombres y apellidos: ${esc(i.inspectorNombre || "")}</td>${c2(`<td>Nombres y apellidos: ${esc(i.respNombre || "")}</td>`)}</tr>
+  <tr><td>Cargo: ${esc(i.inspectorCargo || "")}</td>${c2(`<td>Cargo: ${esc(i.respCargo || "")}</td>`)}</tr>
+  <tr><td class="fm">Firma: ${f && f.firmaInsp ? `<img src="${f.firmaInsp}" alt="">` : ""}</td>${c2(`<td class="fm">Firma: ${f && f.firmaResp ? `<img src="${f.firmaResp}" alt="">` : ""}</td>`)}</tr></table></div>`;
   return h;
 }
 const cargaJS2 = src => new Promise((ok, no) => { if(window.__jsI && window.__jsI[src]) return ok(); const e = document.createElement("script"); e.src = src; e.onload = () => { (window.__jsI = window.__jsI || {})[src] = 1; ok(); }; e.onerror = () => no(new Error("lib")); document.head.appendChild(e); });
@@ -398,7 +470,7 @@ async function firmasDe(i){
   if(S.firmas && S.firmas[i.id]) return S.firmas[i.id];
   const j = await postJ({action:"inspeccion_firmas", id:i.id});
   if(!(j && j.ok)) throw new Error("firmas");
-  (S.firmas = S.firmas || {})[i.id] = {firmaInsp:j.firmaInsp, firmaResp:j.firmaResp};
+  (S.firmas = S.firmas || {})[i.id] = {firmaInsp:j.firmaInsp, firmaResp:j.firmaResp, filas:j.filas || {}};
   return S.firmas[i.id];
 }
 // HTML del formato → PDF A4 horizontal (cada bloque entra completo en una hoja)
@@ -457,13 +529,15 @@ document.addEventListener("click", async ev => {
   const rb = t.closest("[data-in-r]"); if(rb && F){ leeCampos(); const [n, k] = rb.dataset.inR.split("|"); F.crit[+n].r = k; guardaBorrador(); pintaForm(); return; }
   const pq = t.closest("[data-in-pq]"); if(pq && F){ leeCampos(); F.puntos.splice(+pq.dataset.inPq, 1); guardaBorrador(); pintaForm(); return; }
   const fq = t.closest("[data-in-fq]"); if(fq && F){ leeCampos(); const [n, i] = fq.dataset.inFq.split("|"); F.crit[+n].fotos.splice(+i, 1); pintaForm(); return; }
-  const fl = t.closest("[data-in-fl]"); if(fl && F){ if(fl.dataset.inFl === "insp") F.firmaInsp = ""; else F.firmaResp = ""; guardaBorrador(); pintaForm(); return; }
+  const fl = t.closest("[data-in-fl]"); if(fl && F){ leeCampos(); const g = /^g:(\d+):(\w+)$/.exec(fl.dataset.inFl); if(g){ if(F.registro[+g[1]]) F.registro[+g[1]][g[2]] = ""; } else if(fl.dataset.inFl === "insp") F.firmaInsp = ""; else F.firmaResp = ""; guardaBorrador(); pintaForm(); return; }
+  const gq = t.closest("[data-in-gq]"); if(gq && F){ leeCampos(); if(confirm("¿Quitar la fila " + (+gq.dataset.inGq + 1) + "?")){ F.registro.splice(+gq.dataset.inGq, 1); guardaBorrador(); pintaForm(); } return; }
   const k = t.closest("[data-in]"); if(!k) return; const a = k.dataset.in;
   if(a === "pdf" || a === "descargar" || a === "imprimir"){ const i = (S.lista || []).find(x => x.id === S.sel); if(i){ if(a === "imprimir") imprimirInsp(i, k); else compartirInsp(i, k, a === "descargar"); } return; }
   if(a === "nueva"){ if(!S.fmt) return; if(S.fmts.length > 1){ S.vista = "elegir"; repinta(); window.scrollTo(0, 0); } else empieza(S.fmt); }
   else if(a === "seguir"){ const b = leeBorrador(); if(!b) return pintaLista(); S.F = b; S.paso = 0; S.vista = "form"; S.err = ""; pintaForm(); cargaAreas(); }
   else if(a === "descartar"){ if(confirm("¿Descartar la inspección sin terminar?")){ borraBorrador(); pintaLista(); } }
   else if(a === "lista"){ S.fin = false; S.vista = "lista"; repinta(); }
+  else if(a === "fila" && F){ leeCampos(); F.registro.push(filaVacia(F.fmt.def)); guardaBorrador(); pintaForm(); const L = box().querySelectorAll(".in-pt"); if(L.length) L[L.length - 1].scrollIntoView({block:"start", behavior:"smooth"}); }
   else if(a === "punto" && F){ leeCampos(); F.puntos.push(nuevoPunto(F.fmt.def, F.puntos.length + 1)); guardaBorrador(); pintaForm(); }
   else if(a === "salir" && F){ leeCampos(); guardaBorrador(); S.F = null; S.vista = "lista"; pintaLista(); }
   else if(a === "siguiente" && F){
