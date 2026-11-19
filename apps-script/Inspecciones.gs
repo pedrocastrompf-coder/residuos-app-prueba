@@ -8,7 +8,7 @@
  */
 
 // ===================== 1. REGLAS =====================
-const INSP_COLS = ["id","sede","creado","fecha","hora","area","inspectorUsuario","inspectorNombre","respNombre","respCargo","puntos","criterios","pctConf","calificacion","hallazgos","inspectorCargo","firmaInsp","firmaResp","versionId","resultadoTexto","codigo"];
+const INSP_COLS = ["id","sede","creado","fecha","hora","area","inspectorUsuario","inspectorNombre","respNombre","respCargo","puntos","criterios","pctConf","calificacion","hallazgos","inspectorCargo","firmaInsp","firmaResp","versionId","resultadoTexto","codigo","datos","registro"];
 const INSP_LIV = 16;   // columnas que lee el historial antes de las firmas (que pesan); versionId y resultadoTexto se leen aparte
 const INSP_MAX_FIRMA = 30000;   // caracteres máximos de una firma (celda de Sheets: 50 000)
 const INSP_RES = ["C","NC","NA"];
@@ -32,13 +32,18 @@ function inspValidar_(b){
   if (!hzIdValido_(b.id) || String(b.id).length > 50) return {ok:false, error:"id_invalido"};
   const fv = docDefAprobada_(b.versionId); if (!fv || !fv.def.criterios) return {ok:false, error:"formato_invalido"};
   const def = fv.def;
-  const area = inspTxt_(b.area); if (!area || area.length > 40) return {ok:false, error:"area_invalida"};
-  const respNombre = inspTxt_(b.respNombre), respCargo = inspTxt_(b.respCargo);
-  if (respNombre.length < 3 || respNombre.length > 60) return {ok:false, error:"responsable_invalido"};
+  // datos generales: los configurados en el formato, o el campo Área de siempre
+  const dv = inspDatos_(def, b); if (!dv.ok) return dv;
+  const area = dv.area;                                       // "" si el formato no tiene campo Área (entonces las NC no crean hallazgos)
+  const conArea = !def.datos || def.datos.some(c => c.tipo === "area");
+  const dosFirmas = !!def.firmas.resp;
+  const respNombre = dosFirmas ? inspTxt_(b.respNombre) : "", respCargo = dosFirmas ? inspTxt_(b.respCargo) : "";
+  if (dosFirmas && (respNombre.length < 3 || respNombre.length > 60)) return {ok:false, error:"responsable_invalido"};
   if (respCargo.length > 40) return {ok:false, error:"cargo_invalido"};
   const inspCargo = inspTxt_(b.inspectorCargo); if (inspCargo.length > 40) return {ok:false, error:"cargo_invalido"};
-  const okFirma = f => typeof f === "string" && /^data:image\/png;base64,[A-Za-z0-9+\/=]+$/.test(f) && f.length <= INSP_MAX_FIRMA;
-  if (!okFirma(b.firmaInsp) || !okFirma(b.firmaResp)) return {ok:false, error:"firmas_invalidas"};
+  if (!inspFirmaOk_(b.firmaInsp) || (dosFirmas && !inspFirmaOk_(b.firmaResp))) return {ok:false, error:"firmas_invalidas"};
+  // tabla de registro (si el formato la tiene)
+  const rv = inspRegistro_(def, b.registro); if (!rv.ok) return rv;
   // tabla de puntos (si el formato la tiene)
   const P = Array.isArray(b.puntos) ? b.puntos : [], puntos = [];
   const cols = def.puntos ? def.puntos.columnas.map(c => c.k) : [];
@@ -72,9 +77,10 @@ function inspValidar_(b){
     const dp = hzDia_(plazo), dh = hzDia_(hzHoy_());
     if (isNaN(dp) || dp < dh || dp - dh > 365) return {ok:false, error:"nc_invalida", criterio:n, detalle:"plazo_invalido"};
     const desc = ("Criterio " + n + ": " + it.t + " — " + obs.slice(0, 200) + " | Acción: " + accion.slice(0, 120) + " | Resp.: " + resp + " | Plazo: " + plazo.split("-").reverse().join("/")).slice(0, 500);
+    crit.push({n:n, r:"NC", obs:obs.slice(0, 300), accion:accion, responsable:resp, plazo:plazo});
+    if (!conArea) continue;                                   // sin campo Área: la NC queda en el registro, sin hallazgo
     const rep = hzValidarReporte_({id:String(b.id) + "-c" + n, area:area, descripcion:desc, tipo:it.h, riesgo:"Medio", fotos:x.fotos});
     if (!rep.ok) return {ok:false, error:"nc_invalida", criterio:n, detalle:rep.error};
-    crit.push({n:n, r:"NC", obs:obs.slice(0, 300), accion:accion, responsable:resp, plazo:plazo});
     hallazgos.push(rep.v);
   }
   // resultado: porcentaje (se calcula aquí) o texto escrito por el inspector
@@ -83,11 +89,68 @@ function inspValidar_(b){
     resultadoTexto = String(b.resultadoTexto == null ? "" : b.resultadoTexto).trim();
     if (resultadoTexto.length < 10 || resultadoTexto.length > 1500) return {ok:false, error:"resultado_invalido"};
   }
-  return {ok:true, v:{id:String(b.id), versionId:fv.versionId, codigo:fv.codigo, def:def, area:area, respNombre:respNombre, respCargo:respCargo, inspCargo:inspCargo,
+  return {ok:true, v:{id:String(b.id), versionId:fv.versionId, codigo:fv.codigo, def:def, area:area, titulo:dv.titulo, datos:dv.datos, conArea:conArea,
+    registro:rv.filas, firmasFila:rv.firmas, respNombre:respNombre, respCargo:respCargo, inspCargo:inspCargo,
     firmaInsp:b.firmaInsp, firmaResp:b.firmaResp, puntos:puntos, crit:crit, hallazgos:hallazgos, resultadoTexto:resultadoTexto}};
 }
 
+const inspFirmaOk_ = f => typeof f === "string" && /^data:image\/png;base64,[A-Za-z0-9+\/=]+$/.test(f) && f.length <= INSP_MAX_FIRMA;
+// valor de un campo según su tipo; devuelve {ok, v} ("" si vacío)
+function inspValor_(c, x){
+  const t = String(x == null ? "" : x).trim();
+  if (!t) return {ok:true, v:""};
+  if (c.tipo === "numero"){ const n = Number(t.replace(",", ".")); return isFinite(n) && t.length <= 20 ? {ok:true, v:String(n)} : {ok:false}; }
+  if (c.tipo === "fecha") return isNaN(hzDia_(t)) ? {ok:false} : {ok:true, v:t};
+  if (c.tipo === "hora") return /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? {ok:true, v:t} : {ok:false};
+  if (c.tipo === "lista") return c.opciones.indexOf(t) >= 0 ? {ok:true, v:t} : {ok:false};
+  if (c.tipo === "sino") return t === "Sí" || t === "No" ? {ok:true, v:t} : {ok:false};
+  const v = inspTxt_(t); return v.length <= 200 ? {ok:true, v:v} : {ok:false};
+}
+function inspDatos_(def, b){
+  if (!def.datos){                                            // formato con el campo Área de siempre
+    const area = inspTxt_(b.area); if (!area || area.length > 40) return {ok:false, error:"area_invalida"};
+    return {ok:true, area:area, titulo:area, datos:null};
+  }
+  const D = b.datos || {}, out = {}; let area = "", titulo = "";
+  for (const c of def.datos){
+    const r = c.tipo === "area" ? {ok:true, v:inspTxt_(D[c.k]).slice(0, 40)} : inspValor_(c, D[c.k]);
+    if (!r.ok) return {ok:false, error:"dato_invalido", campo:c.t};
+    if (c.req && !r.v) return {ok:false, error:"dato_requerido", campo:c.t};
+    out[c.k] = r.v;
+    if (c.tipo === "area") area = r.v;
+    if (!titulo && r.v && (c.tipo === "texto" || c.tipo === "lista")) titulo = r.v;
+  }
+  return {ok:true, area:area, titulo:(area || titulo || def.titulo).slice(0, 60), datos:out};
+}
+// filas de la tabla de registro; las firmas se separan (van a la pestaña RegistroFirmas: no caben en una celda)
+function inspRegistro_(def, R){
+  if (!def.registro) return {ok:true, filas:[], firmas:[]};
+  R = Array.isArray(R) ? R : [];
+  if (!R.length) return {ok:false, error:"registro_vacio"};
+  if (R.length > def.registro.max) return {ok:false, error:"registro_invalido"};
+  const filas = [], firmas = [];
+  for (let i = 0; i < R.length; i++){
+    const f = R[i] || {}, o = {};
+    for (const c of def.registro.columnas){
+      if (c.tipo === "firma"){
+        const fx = f[c.k];
+        if (fx){ if (!inspFirmaOk_(fx)) return {ok:false, error:"registro_invalido", fila:i + 1, campo:c.t}; firmas.push({fila:i, firma:fx}); o[c.k] = "1"; }
+        else if (c.req) return {ok:false, error:"registro_requerido", fila:i + 1, campo:c.t};
+        else o[c.k] = "";
+        continue;
+      }
+      const r = inspValor_(c, f[c.k]);
+      if (!r.ok) return {ok:false, error:"registro_invalido", fila:i + 1, campo:c.t};
+      if (c.req && !r.v) return {ok:false, error:"registro_requerido", fila:i + 1, campo:c.t};
+      o[c.k] = r.v;
+    }
+    filas.push(o);
+  }
+  return {ok:true, filas:filas, firmas:firmas};
+}
+
 // ===================== 2. PERSISTENCIA =====================
+function inspFirmasFilaHoja_(){ return hoja_("RegistroFirmas", ["id","fila","firma"], ["id"]); }
 function inspHoja_(){ return hoja_("Inspecciones", INSP_COLS, INSP_COLS); }
 
 function inspGuardar_(b, u){
@@ -96,8 +159,10 @@ function inspGuardar_(b, u){
   const v = val.v, sh = inspHoja_();
   const ya = sh.getDataRange().getValues().slice(1).filter(r => String(r[0]) === v.id)[0];
   if (ya) return {ok:true, id:v.id, repetido:true};                               // reintento por mala señal: no duplica
-  const ar = hzAreasTodas_().filter(a => a.nombre === v.area)[0];
-  if (!ar || !ar.activo) return {ok:false, error:"area_invalida"};
+  if (v.conArea){
+    const ar = hzAreasTodas_().filter(a => a.nombre === v.area)[0];
+    if (!ar || !ar.activo) return {ok:false, error:"area_invalida"};
+  }
   const ahora = hzAhora_(), ids = [];
   v.hallazgos.forEach(h => {                                                       // cada NC pasa a la lista única de hallazgos
     const r = hzCrear_({id:h.id, area:h.area, descripcion:h.descripcion, tipo:h.tipo, riesgo:h.riesgo, fotos:h.fotos}, u);
@@ -107,11 +172,13 @@ function inspGuardar_(b, u){
       ids.push(h.id);
     }
   });
-  const porPct = v.def.resultado.modo !== "texto";
+  const porPct = v.def.resultado.modo === "porcentaje";
   const pct = porPct ? inspPorcentaje_(v.crit) : "", cal = porPct ? inspCalificacion_(pct, v.def.resultado.cortes) : "";
-  sh.appendRow([v.id, SEDE, ahora, ahora.slice(0,10), ahora.slice(11,16), v.area, u.usuario, u.nombre, v.respNombre, v.respCargo,
-    JSON.stringify(v.puntos), JSON.stringify(v.crit), pct, cal, JSON.stringify(ids), v.inspCargo, v.firmaInsp, v.firmaResp, v.versionId, v.resultadoTexto, v.codigo]);
-  bitacora_(u, "Inspección registrada", v.id + " · " + v.area + " · " + (porPct ? (pct === "" ? "s/d" : pct + "%") : "resultado en texto") + " · " + ids.length + " hallazgo(s)");
+  if (v.firmasFila.length){ const fs = inspFirmasFilaHoja_(); v.firmasFila.forEach(f => fs.appendRow([v.id, f.fila, f.firma])); }
+  sh.appendRow([v.id, SEDE, ahora, ahora.slice(0,10), ahora.slice(11,16), v.titulo, u.usuario, u.nombre, v.respNombre, v.respCargo,
+    JSON.stringify(v.puntos), JSON.stringify(v.crit), pct, cal, JSON.stringify(ids), v.inspCargo, v.firmaInsp, v.firmaResp || "", v.versionId, v.resultadoTexto, v.codigo,
+    v.datos ? JSON.stringify(v.datos) : "", v.registro.length ? JSON.stringify(v.registro) : ""]);
+  bitacora_(u, "Inspección registrada", v.id + " · " + v.titulo + " · " + (porPct ? (pct === "" ? "s/d" : pct + "%") : "resultado en texto") + " · " + ids.length + " hallazgo(s)");
   return {ok:true, id:v.id, pct:pct, calificacion:cal, hallazgos:ids};
 }
 
@@ -120,14 +187,15 @@ function inspListar_(u){
   const todas = u.rol === "Inspector" || u.rol === "Administrador";
   // se leen las columnas del historial y, aparte, versionId y resultadoTexto (las firmas, que pesan, no se leen)
   const sh = inspHoja_(), n = sh.getLastRow(), jV = INSP_COLS.indexOf("versionId");
-  const A = n < 2 ? [] : sh.getRange(2, 1, n - 1, INSP_LIV).getValues(), B = n < 2 ? [] : sh.getRange(2, jV + 1, n - 1, 3).getValues();
+  const A = n < 2 ? [] : sh.getRange(2, 1, n - 1, INSP_LIV).getValues(), B = n < 2 ? [] : sh.getRange(2, jV + 1, n - 1, 5).getValues();
   const L = A.map((r, i) => {
     const o = {}; INSP_COLS.slice(0, INSP_LIV).forEach((c, j) => o[c] = String(r[j] == null ? "" : r[j]));
-    o.versionId = String(B[i][0] == null ? "" : B[i][0]); o.resultadoTexto = String(B[i][1] == null ? "" : B[i][1]); o.codigo = String(B[i][2] || "") || DOC_INSPECCION; return o;
+    o.versionId = String(B[i][0] == null ? "" : B[i][0]); o.resultadoTexto = String(B[i][1] == null ? "" : B[i][1]); o.codigo = String(B[i][2] || "") || DOC_INSPECCION; o.datos = String(B[i][3] || ""); o.registro = String(B[i][4] || ""); return o;
   }).filter(o => o.sede === SEDE && (todas || o.inspectorUsuario === u.usuario)).reverse().slice(0, 300);
   const out = L.map(o => ({id:o.id, creado:o.creado, fecha:o.fecha, hora:o.hora, area:o.area, inspectorNombre:o.inspectorNombre,
     respNombre:o.respNombre, respCargo:o.respCargo, inspectorCargo:o.inspectorCargo, puntos:JSON.parse(o.puntos || "[]"), criterios:JSON.parse(o.criterios || "[]"),
-    pct:o.pctConf, calificacion:o.calificacion, hallazgos:JSON.parse(o.hallazgos || "[]"), versionId:o.versionId, resultadoTexto:o.resultadoTexto, codigo:o.codigo}));
+    pct:o.pctConf, calificacion:o.calificacion, hallazgos:JSON.parse(o.hallazgos || "[]"), versionId:o.versionId, resultadoTexto:o.resultadoTexto, codigo:o.codigo,
+    datos:o.datos ? JSON.parse(o.datos) : null, registro:o.registro ? JSON.parse(o.registro) : []}));
   return {ok:true, inspecciones:out};
 }
 
@@ -139,7 +207,9 @@ function inspFirmas_(b, u){
   const r = V.filter(x => String(x[0]) === String(b.id) && String(x[1]) === SEDE)[0];
   if (!r) return {ok:false, error:"no_existe"};
   if (!(u.rol === "Inspector" || u.rol === "Administrador" || String(r[6]) === u.usuario)) return {ok:false, error:"permiso"};
-  return {ok:true, firmaInsp:String(r[INSP_COLS.indexOf("firmaInsp")] || ""), firmaResp:String(r[INSP_COLS.indexOf("firmaResp")] || "")};
+  const fs = inspFirmasFilaHoja_(), m = fs.getLastRow(), filas = {};
+  if (m >= 2) fs.getRange(2, 1, m - 1, 3).getValues().forEach(x => { if (String(x[0]) === String(b.id)) filas[Number(x[1])] = String(x[2]); });
+  return {ok:true, firmaInsp:String(r[INSP_COLS.indexOf("firmaInsp")] || ""), firmaResp:String(r[INSP_COLS.indexOf("firmaResp")] || ""), filas:filas};
 }
 
 // Prueba para el editor: guarda una inspección con 1 NC (con la versión vigente del formato) y una imagen JPEG de 1×1 píxel

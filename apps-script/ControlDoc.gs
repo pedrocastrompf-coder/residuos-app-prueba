@@ -53,9 +53,45 @@ function docValidarDef_(d){
     }
     out.puntos = {titulo:titulo, nota:hzTxt_(p.nota).slice(0, 150), max:max, columnas:C};
   } else out.puntos = null;
-  // criterios en grupos; se numeran 1..N en el orden en que aparecen
+  // datos generales configurables (opcional; sin ellos se usa el campo Área de siempre). Fecha, hora e inspector los pone la app.
+  if (Array.isArray(d.datos)){
+    if (d.datos.length > 12) return {ok:false, error:"def_invalida", campo:"Datos generales (máximo 12 campos)"};
+    const ks = {}, D = []; let areas = 0;
+    for (let i = 0; i < d.datos.length; i++){
+      const c = d.datos[i] || {}, k = String(c.k || ""), t = T(c.t, 2, 40), tipo = String(c.tipo || "");
+      if (!/^[a-z0-9]{2,16}$/.test(k) || ks[k]) return {ok:false, error:"def_invalida", campo:"Campo " + (i + 1) + " de los datos generales (clave)"};
+      if (t === null) return {ok:false, error:"def_invalida", campo:"Nombre del campo " + (i + 1) + " de los datos generales (2 a 40 caracteres)"};
+      if (DOC_TIPOS_DATO.indexOf(tipo) < 0) return {ok:false, error:"def_invalida", campo:"Tipo del campo «" + t + "»"};
+      const op = tipo === "lista" ? docOpciones_(c.opciones) : [];
+      if (tipo === "lista" && op.length < 2) return {ok:false, error:"def_invalida", campo:"Opciones de la lista «" + t + "» (al menos 2)"};
+      if (tipo === "area") areas++;
+      ks[k] = 1; D.push({k:k, t:t, tipo:tipo, opciones:op, req:c.req !== false});
+    }
+    if (areas > 1) return {ok:false, error:"def_invalida", campo:"Solo un campo puede ser de tipo Área"};
+    out.datos = D;
+  } else out.datos = null;
+  // tabla de registro (filas que agrega quien llena: asistentes, equipos, mediciones…), con firma por fila si se quiere
+  if (d.registro){
+    const r = d.registro, cols = Array.isArray(r.columnas) ? r.columnas : [], ks = {}, C = [];
+    const titulo = T(r.titulo, 3, 60); if (titulo === null) return {ok:false, error:"def_invalida", campo:"Título de la tabla de registro"};
+    const max = Math.floor(Number(r.max)); if (!(max >= 1 && max <= 60)) return {ok:false, error:"def_invalida", campo:"Máximo de filas de la tabla de registro (1 a 60)"};
+    if (cols.length < 1 || cols.length > 10) return {ok:false, error:"def_invalida", campo:"Columnas de la tabla de registro (1 a 10)"};
+    for (let i = 0; i < cols.length; i++){
+      const c = cols[i] || {}, k = String(c.k || ""), t = T(c.t, 2, 30), tipo = String(c.tipo || "");
+      if (!/^[a-z0-9]{2,16}$/.test(k) || ks[k]) return {ok:false, error:"def_invalida", campo:"Columna " + (i + 1) + " de la tabla de registro (clave)"};
+      if (t === null) return {ok:false, error:"def_invalida", campo:"Nombre de la columna " + (i + 1) + " de la tabla de registro (2 a 30 caracteres)"};
+      if (DOC_TIPOS_COL.indexOf(tipo) < 0) return {ok:false, error:"def_invalida", campo:"Tipo de la columna «" + t + "»"};
+      const op = tipo === "lista" ? docOpciones_(c.opciones) : [];
+      if (tipo === "lista" && op.length < 2) return {ok:false, error:"def_invalida", campo:"Opciones de la columna «" + t + "» (al menos 2)"};
+      ks[k] = 1; C.push({k:k, t:t, tipo:tipo, opciones:op, req:c.req !== false});
+    }
+    if (C.filter(c => c.tipo === "firma").length > 1) return {ok:false, error:"def_invalida", campo:"Solo una columna de firma en la tabla de registro"};
+    out.registro = {titulo:titulo, nota:hzTxt_(r.nota).slice(0, 150), max:max, columnas:C};
+  } else out.registro = null;
+  // criterios en grupos; se numeran 1..N en el orden en que aparecen. Pueden no existir si el formato es solo un registro.
   const G = d.criterios && Array.isArray(d.criterios.grupos) ? d.criterios.grupos : [];
-  if (G.length < 1 || G.length > 8) return {ok:false, error:"def_invalida", campo:"Grupos de criterios (1 a 8)"};
+  if (G.length > 8) return {ok:false, error:"def_invalida", campo:"Grupos de criterios (máximo 8)"};
+  if (!G.length && !out.registro) return {ok:false, error:"def_invalida", campo:"El formato necesita criterios o una tabla de registro"};
   let n = 0, autos = 0; const grupos = [];
   for (let g = 0; g < G.length; g++){
     const nombre = T(G[g] && G[g].nombre, 3, 50); if (nombre === null) return {ok:false, error:"def_invalida", campo:"Nombre del grupo " + (g + 1) + " (3 a 50 caracteres)"};
@@ -75,9 +111,10 @@ function docValidarDef_(d){
   if (n > 40) return {ok:false, error:"def_invalida", campo:"Total de criterios (máximo 40)"};
   if (autos > 1) return {ok:false, error:"def_invalida", campo:"Solo un criterio puede calcularse desde la tabla de puntos"};
   out.criterios = {grupos:grupos};
-  // resultado: porcentaje de cumplimiento o texto
+  // resultado: porcentaje de cumplimiento, texto o ninguno
   const R = d.resultado || {};
-  if (R.modo === "texto"){
+  if (R.modo === "ninguno" || (!grupos.length && R.modo !== "texto")) out.resultado = {modo:"ninguno"};
+  else if (R.modo === "texto"){
     const titulo = T(R.titulo, 3, 60); if (titulo === null) return {ok:false, error:"def_invalida", campo:"Título del resultado"};
     out.resultado = {modo:"texto", titulo:titulo};
   } else {
@@ -85,13 +122,20 @@ function docValidarDef_(d){
     if (!(sat > 0 && sat <= 100 && ace > 0 && ace < sat)) return {ok:false, error:"def_invalida", campo:"Cortes del resultado (aceptable menor que satisfactorio, hasta 100 %)"};
     out.resultado = {modo:"porcentaje", cortes:{sat:sat, ace:ace}};
   }
-  // firmas (dos firmantes)
+  // firmas: quien llena el formato y, si el título no está vacío, una segunda persona
   const F = d.firmas || {};
-  const fi = T(F.insp, 3, 60), fr = T(F.resp, 3, 60);
+  const fi = T(F.insp, 3, 60), fr = hzTxt_(F.resp) ? T(F.resp, 3, 60) : "";
   if (fi === null || fr === null) return {ok:false, error:"def_invalida", campo:"Títulos de las firmas (3 a 60 caracteres)"};
   out.firmas = {insp:fi, resp:fr};
   if (JSON.stringify(out).length > DOC_MAX_DEF) return {ok:false, error:"def_invalida", campo:"El formato es demasiado grande"};
   return {ok:true, def:out};
+}
+
+const DOC_TIPOS_DATO = ["texto","numero","fecha","hora","lista","area"];
+const DOC_TIPOS_COL = ["texto","numero","fecha","hora","lista","sino","firma"];
+function docOpciones_(v){
+  const L = (Array.isArray(v) ? v : String(v || "").split(/[,;\n]/)).map(x => hzTxt_(x)).filter(x => x && x.length <= 40);
+  return L.filter((x, i) => L.indexOf(x) === i).slice(0, 20);
 }
 
 // Resumen automático de qué cambió entre dos definiciones (para el control de cambios)
@@ -119,10 +163,13 @@ function docResumenCambios_(a, b){
     if (ca !== cb) R.push("Columnas de la tabla de puntos: " + pb.columnas.map(c => c.t).join(", "));
   }
   const ra = a.resultado, rb = b.resultado;
-  if (ra.modo !== rb.modo) R.push("Resultado: " + (rb.modo === "texto" ? "texto" : "porcentaje"));
+  if (ra.modo !== rb.modo) R.push("Resultado: " + ({texto:"texto", porcentaje:"porcentaje", ninguno:"sin resultado"})[rb.modo]);
   else if (rb.modo === "porcentaje" && (ra.cortes.sat !== rb.cortes.sat || ra.cortes.ace !== rb.cortes.ace)) R.push("Cortes: " + ra.cortes.sat + "/" + ra.cortes.ace + " → " + rb.cortes.sat + "/" + rb.cortes.ace);
   else if (rb.modo === "texto" && ra.titulo !== rb.titulo) R.push("Título del resultado");
-  if (a.firmas.insp !== b.firmas.insp || a.firmas.resp !== b.firmas.resp) R.push("Títulos de las firmas");
+  if (a.firmas.insp !== b.firmas.insp || a.firmas.resp !== b.firmas.resp) R.push(b.firmas.resp ? "Títulos de las firmas" : "Una sola firma");
+  const J = x => JSON.stringify(x || null);
+  if (J(a.datos) !== J(b.datos)) R.push(b.datos ? "Datos generales: " + b.datos.map(c => c.t).join(", ") : "Datos generales: los de siempre");
+  if (J(a.registro) !== J(b.registro)) R.push(b.registro ? "Tabla de registro: " + b.registro.columnas.map(c => c.t).join(", ") : "Se quita la tabla de registro");
   return (R.length ? R.join(" · ") : "Sin cambios de contenido.").slice(0, 900);
 }
 
@@ -411,4 +458,4 @@ const DOC_DEF_07 = {titulo:"Inspección ambiental de área de trabajo", puntos:D
     {t:"Sin fugas de agua, vapor, aire o gas; equipos apagados si no se usan; flujómetros operativos", h:"Uso de agua y energía"}]}]},
   resultado:{modo:"porcentaje", cortes:{sat:90, ace:70}}, firmas:DOC_FIRMAS_INSPECCION};
 
-if (typeof module !== "undefined") module.exports = {docPdfData_, docPlantilla_, docValidarDef_, docResumenCambios_, docSigVersion_, DOC_DEF_06, DOC_DEF_07};
+if (typeof module !== "undefined") module.exports = {docOpciones_, docPdfData_, docPlantilla_, docValidarDef_, docResumenCambios_, docSigVersion_, DOC_DEF_06, DOC_DEF_07};
