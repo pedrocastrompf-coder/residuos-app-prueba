@@ -8,17 +8,18 @@
 
 const NS = (el, tag) => Array.from(el.getElementsByTagNameNS("*", tag));
 const limpia = s => String(s == null ? "" : s).replace(/ /g, " ").replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
-const mayus = s => { const l = s.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ]/g, ""); return l.length >= 3 && l === l.toUpperCase(); };
+// «casi todo en mayúsculas» (admite siglas como pH)
+const mayus = s => { const l = s.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ]/g, ""), m = l.replace(/[^A-ZÁÉÍÓÚÑ]/g, ""); return l.length >= 3 && m.length >= 0.85 * l.length; };
 // «INSPECCIÓN AMBIENTAL» → «Inspección ambiental» (solo si venía todo en mayúsculas; respeta códigos y siglas cortas como NTP, FDS)
 function oracion(s){
   s = limpia(s).replace(/\n/g, " ");
   if(!mayus(s)) return s;
-  const r = s.toLowerCase().replace(/\b(ntp|fds|epp|raee|iperc|sst|sga|iso|msds|pcb|glp|n°|ph|ruc|dni|epp|mtc|minam|oefa|sunafil|iga|ppe)\b/g, m => m.toUpperCase())
+  const r = s.toLowerCase().replace(/\bph\b/g, "pH").replace(/\b(ntp|fds|epp|raee|iperc|sst|sga|iso|msds|pcb|glp|n°|ruc|dni|epp|mtc|minam|oefa|sunafil|iga|ppe)\b/g, m => m.toUpperCase())
     .replace(/\(([a-záéíóúñ]{2,8})\)/g, (m, x) => "(" + x.toUpperCase() + ")");   // siglas entre paréntesis
-  return r.charAt(0).toUpperCase() + r.slice(1);
+  return /^pH\b/.test(r) ? r : r.charAt(0).toUpperCase() + r.slice(1);
 }
 const recorta = (s, n) => s.length <= n ? s : s.slice(0, n - 1).replace(/\s+\S*$/, "") + "…";
-const sinNumero = s => s.replace(/^\s*(\d{1,2}(\.\d{1,2})?|[a-z])\s*[.)\-–:]+\s*/i, "");
+const sinNumero = s => s.replace(/^\s*(\d{1,2}\.\d{1,2}\.?|\d{1,2}\s*[.)\-–:]+|[a-z]\s*[.)\-–:]+)\s*/i, "");
 
 /* ---------- lectura: el archivo se convierte en filas [{c:columna, t:texto}] ---------- */
 const colNum = ref => { const m = /^([A-Z]+)/.exec(ref); let n = 0; for(const ch of m[1]) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
@@ -90,7 +91,7 @@ const RE_FIN = /^(responsable|firma|nombres?( y apellidos)?|cargo|observaci[oó]
 const RE_PUNTO = /punto|contenedor|estaci[oó]n/i;
 const COLORES = [[/no\s*aprovech/i, "#1f1f1f"], [/org[aá]nic/i, "#8b5a2b"], [/papel|cart[oó]n/i, "#1f5fbf"], [/pl[aá]stic/i, "#ffffff"], [/vidrio/i, "#2e8b3d"], [/metal/i, "#f2c200"], [/peligros/i, "#d32f2f"]];
 const TIPO_HZ = [[/envase|contenci[oó]n|bandeja/i, "Almacenamiento y acopio"], [/^orden|orden y limpieza|limpieza de/i, "Orden y limpieza"], [/derram|kit|fuga de (aceite|qu[ií]mic)/i, "Derrames y fugas"], [/peligros|qu[ií]mic|fds|hoja de seguridad|insumo/i, "Almacenamiento y acopio"],
-  [/segrega|c[oó]digo de colores|bolsa|rotul|merma|envoltur/i, "Segregación de residuos"], [/contenedor|acopio|almac|capacidad|sobrellen/i, "Almacenamiento y acopio"],
+  [/lodo|\bph\b|dosific|cisterna|aireaci|afluente|ptar|scraper|mezclador/i, "Efluentes y desagües"], [/segrega|c[oó]digo de colores|bolsa|rotul|merma|envoltur/i, "Segregación de residuos"], [/contenedor|acopio|almac|capacidad|sobrellen/i, "Almacenamiento y acopio"],
   [/efluente|desag[uü]e|trampa|vertimiento|\bcip\b/i, "Efluentes y desagües"], [/agua|energ[ií]a|vapor|aire comprimido|flujo|luz|equipos? apagad/i, "Uso de agua y energía"],
   [/orden|limpieza|plaga/i, "Orden y limpieza"]];
 const tipoHz = t => { for(const [r, h] of TIPO_HZ) if(r.test(t)) return h; return "Otro"; };
@@ -115,7 +116,8 @@ function analizar(filas){
   for(let i = 0; i < filas.length && iCrit < 0; i++){
     const f = filas[i], h = f.filter(x => RE_CRIT.test(x.t) && x.t.length <= 160)[0];
     const cnc = esResp(f);
-    if(h && (cnc || /criterio|requisito|aspecto|a verificar|a evaluar/i.test(h.t))){ iCrit = i; cCrit = h.c; }
+    const cncSig = !cnc && filas[i + 1] && esResp(filas[i + 1]) && filas[i + 1].every(x => CORTAS.test(x.t));
+    if(h && (cnc || cncSig || /criterio|requisito|aspecto|a verificar|a evaluar/i.test(h.t))){ iCrit = i; cCrit = h.c; }
     else if(cnc && i > 0 && f.filter(x => !CORTAS.test(x.t)).length >= 1 && !filas.slice(i + 1, i + 3).some(g => g.every(x => CORTAS.test(x.t) || /^\d+$/.test(x.t)))){ iCrit = i; cCrit = (f.filter(x => !CORTAS.test(x.t))[0] || {c:0}).c; }
   }
 
@@ -174,16 +176,23 @@ function analizar(filas){
     if(OMITIR.test(lab) && !/^fecha (de|del) (?!aprobaci)/i.test(lab) || vistosD[k]) return;
     vistosD[k] = 1;
     const t = oracion(lab).slice(0, 40), tipo = /^[aá]rea\b/i.test(lab) ? "area" : /^fecha/i.test(lab) ? "fecha" : /^hora/i.test(lab) ? "hora"
-      : /^(n[°º]\s*(de\s*)?)?(horas|cantidad|peso|kg|trabajadores|asistentes)|^n[°º] (de )?horas/i.test(lab) ? "numero" : "texto";
+      : /^(n[°º]\s*(de\s*)?)?(horas|cantidad|peso|kg|trabajadores|asistentes)|^n[°º] (de )?horas|\bph\b|caudal|temperatura|volumen|consumo/i.test(lab) ? "numero" : "texto";
     datos.push({k:"d" + (datos.length + 1) + Math.random().toString(36).slice(2, 6), t:t, tipo:tipo, opciones:[], req:true});
   }));
   if(datos.filter(c => c.tipo === "area").length > 1) datos.forEach((c, j) => { if(c.tipo === "area" && datos.findIndex(x => x.tipo === "area") !== j) c.tipo = "texto"; });
 
   // criterios y grupos
   const grupos = []; let g = null, n = 0;
-  const filasCrit = iCrit >= 0 ? filas.slice(iCrit + 1) : [];
+  // si el bloque empieza con su título («1. TRAMPAS DE GRASA») justo antes del encabezado, se incluye
+  let iIni = iCrit + 1;
+  if(iCrit > 3 && filas[iCrit - 1] && filas[iCrit - 1].length === 1 && mayus(filas[iCrit - 1][0].t) && filas[iCrit - 1][0].t.length <= 90) iIni = iCrit - 1;
+  const filasCrit = iCrit >= 0 ? filas.slice(iIni) : [];
+  // numeración decimal (1.1, 1.2…): entonces «1. TÍTULO» es un grupo, no un criterio
+  const decimal = filasCrit.some(f => f.some(x => /^\s*\d{1,2}\.\d{1,2}\b/.test(x.t)));
+  const RE_ENC = /^(verificaci[oó]n|observaci[oó]n(es)?|comentarios?|criterios?|resultado|cumple|evaluaci[oó]n|[ií]tem)$/i;
   for(const f of filasCrit){
     if(!f.length){ if(n) break; else continue; }             // fin de la tabla (Word)
+    if(f.every(x => CORTAS.test(x.t) || RE_ENC.test(x.t))) continue;     // encabezados repetidos en cada bloque
     const txt = f.filter(x => !CORTAS.test(x.t) && !/^\d+([.,]\d+)?$/.test(x.t) && x.t.length >= 2);
     if(!txt.length) continue;
     const princ = txt.filter(x => cCrit < 0 || x.c >= cCrit - 1).sort((a, b) => b.t.length - a.t.length)[0] || txt[0];
@@ -192,7 +201,8 @@ function analizar(filas){
     if(/^\*/.test(t0)) continue;                               // notas al pie («*Según reglamento…»)
     const numerado = /^\s*\d/.test(princ.t) || f.some(x => x.c < princ.c && /^\d{1,3}$/.test(x.t));
     if(/^otros?\s*(\(.*\))?\s*:?\s*$/i.test(t0) && (numerado || /:\s*$/.test(t0))) continue;     // fila «Otro:» se omite
-    const esGrupo = txt.length === 1 && mayus(t0) && t0.length <= 90 && !numerado && !/[.:;]$/.test(t0);
+    const titNum = decimal && /^\s*\d{1,2}\s*[.)\-]\s*\D/.test(princ.t);
+    const esGrupo = txt.length === 1 && mayus(t0) && t0.length <= 90 && (!numerado || titNum) && !/[.:;]$/.test(t0);
     if(esGrupo){ g = {nombre:recorta(oracion(t0.replace(/\*+$/, "").trim()), 50), items:[]}; grupos.push(g); continue; }
     if(t0.length < 3) continue;
     if(!g){ g = {nombre:"Criterios de inspección", items:[]}; grupos.push(g); }
