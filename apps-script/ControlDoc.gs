@@ -238,6 +238,8 @@ function docCrear_(b, u){
   if (titulo.length < 3 || titulo.length > 80) return {ok:false, error:"titulo_invalido"};
   if (DOC_TIPOS.indexOf(tipo) < 0) return {ok:false, error:"tipo_invalido"};
   if (resp.length < 3 || resp.length > 60) return {ok:false, error:"responsable_invalido"};
+  // si el formato viene de un archivo con versión (p. ej. 05 en papel), la primera versión en la app continúa la numeración (06)
+  const base = parseInt(b.versionBase, 10), primera = base >= 1 && base <= 98 ? ("0" + (base + 1)).slice(-2) : "01";
   {
     if (docFilas_(docHoja_(), DOC_COLS).some(d => d.codigo.toUpperCase() === codigo)) return {ok:false, error:"codigo_existe"};
     const ahora = hzAhora_();
@@ -246,8 +248,8 @@ function docCrear_(b, u){
     let versionId = "";
     if (docEsFormato_(tipo)){
       versionId = "v-" + Utilities.getUuid().slice(0, 8);
-      verHoja_().appendRow([versionId, codigo, "01", "Borrador", JSON.stringify(docPlantilla_(titulo)), u.usuario, u.nombre, ahora, ahora, "", "", "", "", "Creación del documento.", ""]);
-      docCambio_(codigo, "01", "Borrador creado", u, "Creación del documento.", "Plantilla inicial.");
+      verHoja_().appendRow([versionId, codigo, primera, "Borrador", JSON.stringify(docPlantilla_(titulo)), u.usuario, u.nombre, ahora, ahora, "", "", "", "", "Creación del documento.", ""]);
+      docCambio_(codigo, primera, "Borrador creado", u, "Creación del documento.", "Plantilla inicial." + (primera !== "01" ? " Continúa la versión " + ("0" + base).slice(-2) + " del documento en papel." : ""));
     }
     bitacora_(u, "Documento creado", codigo + " · " + tipo);
     return {ok:true, codigo:codigo, versionId:versionId};

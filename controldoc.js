@@ -40,7 +40,9 @@ st.textContent = `
 .dc-chk{display:flex;gap:8px;align-items:center;font-size:14px;margin:8px 0}
 .dc-chk input{width:18px;height:18px}
 .dc-op{display:flex;gap:8px;margin:6px 0}.dc-op label{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:10px;text-align:center;font-weight:600;font-size:14px;cursor:pointer}
-.dc-op input{display:none}.dc-op label.on{border-color:var(--brown);background:#f6efe8;color:var(--brown)}
+.dc-op input{display:none}
+.dc-ed label.btn{display:inline-flex;align-items:center;justify-content:center;margin:0;cursor:pointer}
+.dc-imp{background:#f6efe8;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;font-size:13.5px}.dc-imp .m{font-size:12.5px;color:var(--gray);margin-top:3px}.dc-op label.on{border-color:var(--brown);background:#f6efe8;color:var(--brown)}
 `;
 document.head.appendChild(st);
 
@@ -50,6 +52,15 @@ const fecha = s => s ? String(s).slice(8,10) + "/" + String(s).slice(5,7) + "/" 
 const fh = s => s ? fecha(s) + " " + String(s).slice(11,16) : "";
 const copia = o => JSON.parse(JSON.stringify(o));
 const msg = j => (j && (j.error === "def_invalida" && j.campo ? "Revise: " + j.campo + "." : ERR[j.error])) || "No se pudo completar. Intente de nuevo.";
+
+const cargaJS = src => new Promise((ok, no) => { if(window.__jsD && window.__jsD[src]) return ok(); const e = document.createElement("script"); e.src = src; e.onload = () => { (window.__jsD = window.__jsD || {})[src] = 1; ok(); }; e.onerror = () => no(new Error("No se pudo cargar el lector de archivos. Revise su señal.")); document.head.appendChild(e); });
+// lee un Word o Excel en el equipo (no se envía a ningún servidor) y devuelve la estructura reconocida
+async function importa(file){
+  await cargaJS("lib/jszip.min.js"); await cargaJS("importar.js");
+  if(file.size > 15 * 1048576) throw new Error("El archivo pesa más de 15 MB.");
+  return window.IMPORTAR.leer(file);
+}
+const resumenImp = (r, nombre) => `<div class="dc-imp"><b>📄 ${esc(nombre)}</b><div>Se reconoció: ${esc(r.resumen.join(" · "))}${r.version ? " · versión " + esc(r.version) + " en el archivo" : ""}.</div>${r.avisos.map(a => `<div class="m">• ${esc(a)}</div>`).join("")}<div class="m">Es una base: revise y afine todo en el editor antes de aprobar.</div></div>`;
 
 /* ---------- datos ---------- */
 async function cargaDocs(){
@@ -117,6 +128,9 @@ function pintaNuevo(){
     <div class="in-card"><h3>Nuevo documento</h3>
       <label class="f">Tipo</label><div class="dc-op">${["Formato","Procedimiento","Instructivo"].map(t => `<label class="${N.tipo === t ? "on" : ""}"><input type="radio" name="dc-tipo" data-dc="tipo" data-t="${t}">${t}</label>`).join("")}</div>
       <p class="s">${N.tipo === "Formato" ? "Un formato se arma en el editor y, al aprobarlo, se puede llenar en Inspecciones." : "Cada versión se sube como PDF (hecho en Word u otro programa)."}</p>
+      ${N.tipo === "Formato" ? `<label class="f">Partir de un archivo (opcional)</label>
+      ${N.imp ? resumenImp(N.imp, N.impNombre) + `<div class="in-top"><label class="btn sec sm">Cambiar archivo<input type="file" accept=".docx,.xlsx" data-dc-imp="nuevo" hidden></label><button type="button" class="btn sec sm" data-dc="imp-quita">Quitar</button></div>`
+        : `<label class="btn sec" style="display:block;text-align:center">${S.leyendo ? "Leyendo el archivo…" : "📄 Importar desde Word o Excel"}<input type="file" accept=".docx,.xlsx" data-dc-imp="nuevo" hidden></label><p class="s">Se reconocen el código, el título, la versión, los criterios y la tabla de puntos. El archivo no se sube a ningún servidor.</p>`}` : ""}
       <label class="f">Código</label><input class="in" data-dc-n="codigo" maxlength="30" autocomplete="off" placeholder="Por ejemplo SGA.R.G.010" value="${esc(N.codigo)}">
       <label class="f">Título</label><input class="in" data-dc-n="titulo" maxlength="80" autocomplete="off" value="${esc(N.titulo)}">
       <label class="f">Responsable</label><input class="in" data-dc-n="responsable" maxlength="60" autocomplete="off" value="${esc(N.responsable)}"></div>
@@ -130,10 +144,16 @@ async function crear(){
   if(S.err) return pintaNuevo();
   S.ocupado = true; pintaNuevo();
   try{
-    const j = await postJ({action:"doc_crear", codigo:N.codigo.trim(), titulo:N.titulo.trim(), tipo:N.tipo, responsable:N.responsable.trim()}, 60000);
+    const imp = N.tipo === "Formato" ? N.imp : null;
+    const j = await postJ({action:"doc_crear", codigo:N.codigo.trim(), titulo:N.titulo.trim(), tipo:N.tipo, responsable:N.responsable.trim(), versionBase:imp && imp.version || ""}, 60000);
     S.ocupado = false;
     if(!(j && j.ok)){ S.err = msg(j); return pintaNuevo(); }
     toast("Documento " + j.codigo + " creado");
+    if(imp && j.versionId){                                 // la estructura importada pasa al borrador
+      imp.def.titulo = N.titulo.trim().slice(0, 80);
+      const k = await postJ({action:"doc_borrador_guardar", codigo:j.codigo, definicion:imp.def, motivo:"Importado de " + N.impNombre + (imp.version ? " (versión " + imp.version + " en papel)" : "") + "."}, 60000);
+      if(!(k && k.ok)) toast("El documento se creó, pero la estructura importada no se guardó: " + msg(k));
+    }
     S.N = {codigo:"", titulo:"", tipo:"Formato", responsable:"Medio Ambiente"}; S.sel = j.codigo; S.vista = "detalle"; S.err = ""; window.scrollTo(0, 0);
     await cargaDetalle(j.codigo);
     if(j.versionId && S.det) abreEditor(j.versionId);       // un formato nuevo se abre directo en el editor
@@ -198,7 +218,8 @@ function pintaEditor(){
   const E = S.E; if(!E) return;
   const d = E.def, P = d.puntos, R = d.resultado;
   let n = 0;
-  box().innerHTML = `<div class="dc-ed"><div class="in-top"><button class="btn sec sm" data-dc="cancelar">← Cancelar</button></div>
+  box().innerHTML = `<div class="dc-ed"><div class="in-top" style="justify-content:space-between"><button class="btn sec sm" data-dc="cancelar">← Cancelar</button><label class="btn sec sm">${S.leyendo ? "Leyendo…" : "📄 Importar de Word o Excel"}<input type="file" accept=".docx,.xlsx" data-dc-imp="editor" hidden></label></div>
+    ${E.impNombre ? resumenImp(E.imp, E.impNombre) : ""}
     <div class="in-card"><h3>Encabezado</h3><p class="s">${esc(E.codigo)} · ${E.borrador ? "borrador versión " + esc(E.borrador) : "nueva versión (se numera al guardar)"}</p>
       <label class="f">Título del formato</label><input class="in" data-dc-f="titulo" maxlength="80" value="${esc(d.titulo)}"></div>
     <div class="in-card"><h3>Tabla de puntos</h3><p class="s">Filas que agrega quien llena el formato (por ejemplo, puntos de segregación), con columnas C / NC / N/A.</p>
@@ -339,6 +360,7 @@ document.addEventListener("click", async ev => {
   if(a === "nuevo"){ S.vista = "nuevo"; S.err = ""; window.scrollTo(0, 0); return repinta(); }
   if(a === "tipo"){ S.N.tipo = k.dataset.t; return pintaNuevo(); }
   if(a === "crear") return crear();
+  if(a === "imp-quita"){ S.N.imp = null; S.N.impNombre = ""; return pintaNuevo(); }
   if(a === "subir"){ S.P = {motivo:"", pdf:null, nombre:""}; const br = S.det.versiones.filter(v => v.estado === "Borrador")[0]; if(br) S.P.motivo = br.motivo; S.vista = "subir"; S.err = ""; window.scrollTo(0, 0); return repinta(); }
   if(a === "volver"){ S.P = null; S.vista = "detalle"; S.err = ""; return repinta(); }
   if(a === "subir-guardar") return subirGuardar();
@@ -390,6 +412,25 @@ document.addEventListener("input", ev => {
 });
 document.addEventListener("change", async ev => {
   if(TAB !== "doc" || !ev.target.dataset) return;
+  if(ev.target.dataset.dcImp){                                // Word o Excel para armar la estructura
+    const f = ev.target.files && ev.target.files[0], donde = ev.target.dataset.dcImp; ev.target.value = ""; if(!f) return;
+    S.leyendo = true; S.err = ""; repinta();
+    try{
+      const r = await importa(f);
+      if(donde === "nuevo"){
+        S.N.imp = r; S.N.impNombre = f.name;
+        if(!S.N.codigo && r.codigo) S.N.codigo = r.codigo.toUpperCase();
+        if(!S.N.titulo && r.titulo) S.N.titulo = r.titulo;
+      } else if(S.E){
+        if(!confirm("¿Reemplazar el contenido del formato con lo reconocido en «" + f.name + "»? Puede cancelar el editor sin guardar si no le convence.")){ S.leyendo = false; return repinta(); }
+        r.def.titulo = S.E.def.titulo;                        // el título del documento no cambia
+        S.E.def = r.def; S.E.imp = r; S.E.impNombre = f.name;
+        if(!String(S.E.motivo || "").trim() || /^Primera versión\.?$/.test(S.E.motivo)) S.E.motivo = "Importado de " + f.name + ".";
+        guardaLocal();
+      }
+    }catch(e){ S.err = e && e.message && e.message.length > 6 ? e.message : "No se pudo leer el archivo. Verifique que sea .docx o .xlsx."; }
+    S.leyendo = false; return repinta();
+  }
   if(ev.target.dataset.dcPdf && S.P){                         // PDF elegido para la versión
     const f = ev.target.files && ev.target.files[0]; if(!f) return;
     if(f.type && f.type !== "application/pdf"){ S.err = "El archivo debe ser PDF."; return pintaSubir(); }
