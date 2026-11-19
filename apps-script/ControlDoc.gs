@@ -122,10 +122,17 @@ function docHoja_(){ return hoja_("Documentos", DOC_COLS, DOC_COLS); }
 function verHoja_(){ return hoja_("Versiones", VER_COLS, VER_COLS); }
 function ccHoja_(){ return hoja_("ControlCambios", CC_COLS, CC_COLS); }
 
+// Sheets puede convertir "06" en 6 y "2026-11-19" en fecha: al leer se devuelve siempre el texto original
+function docCelda_(c, v){
+  if (v == null) return "";
+  if (v instanceof Date) return Utilities.formatDate(v, "America/Lima", c === "fechaAprobacion" ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm:ss");
+  if (c === "version" && typeof v === "number") return ("0" + v).slice(-2);
+  return String(v);
+}
 function docFilas_(sh, cols){
   const n = sh.getLastRow(); if (n < 2) return [];
   return sh.getRange(2, 1, n - 1, cols.length).getValues().map((r, i) => {
-    const o = {_fila:i + 2}; cols.forEach((c, j) => o[c] = String(r[j] == null ? "" : r[j])); return o;
+    const o = {_fila:i + 2}; cols.forEach((c, j) => o[c] = docCelda_(c, r[j])); return o;
   });
 }
 function docEscribir_(sh, cols, o){ sh.getRange(o._fila, 1, 1, cols.length).setValues([cols.map(c => o[c] == null ? "" : o[c])]); }
