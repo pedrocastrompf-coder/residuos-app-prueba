@@ -452,6 +452,20 @@ table.d tfoot td{background:#F6EFE8;border-bottom:0}
 /* aviso y acceso */
 .toast{border-radius:12px;padding:11px 18px;box-shadow:0 8px 24px rgba(0,0,0,.18);font-weight:500;transition:opacity .2s,transform .2s;transform:translateX(-50%) translateY(6px)}
 .toast.on{transform:translateX(-50%) translateY(0)}
+.toast.act{display:flex;align-items:center;gap:14px;text-align:left}
+.toast.on.act{pointer-events:auto}
+.toast button{flex:none;background:none;border:0;color:#F2C9A0;font:inherit;font-weight:650;padding:8px 2px;min-height:40px;cursor:pointer}
+ol.pl li.nw{border-color:#9CCB9F;background:#F1F8F1}
+.toast.act{width:max-content}
+.stick #f-salir{flex:0 0 auto;width:auto;padding:0 14px}
+.stick #f-add{padding:0 10px;white-space:nowrap}
+.door.ce{border-color:var(--line2);background:#fff}
+.opfin{border-color:#BFDCC1;background:#F4FAF4}
+.opfin b{display:block;font-size:17px;color:var(--ok)}
+.opfin .s{color:var(--ink2);margin-top:2px}
+.opfin .env{margin-top:8px;font-weight:600;color:var(--ink2)}
+.opfin .env.ok{color:var(--ok)}
+.opfin .env.pe{color:#9A5B00}
 .lg{background:radial-gradient(1200px 600px at 20% -10%,#7A4B2A 0,var(--brown) 45%,#3E2513 100%)}
 .lg .box{border-radius:18px;padding:28px 24px 22px;box-shadow:0 20px 50px rgba(0,0,0,.28)}
 .lg img{height:56px;margin-bottom:14px}
@@ -843,7 +857,8 @@ input[type=date].in,input[type=time].in{font-variant-numeric:tabular-nums}
       <div class="stick">
         <div class="row2">
           <button class="btn sec hidden" id="f-cancel">Cancelar edición</button>
-          <button class="btn" id="f-add">Guardar pesada</button>
+          <button class="btn sec" id="f-salir">Guardar y salir</button>
+          <button class="btn" id="f-add">Guardar y pesar otro</button>
         </div>
       </div>
     </div>
@@ -1143,19 +1158,27 @@ function estadoHoja(){   // Operador: dice con claridad si lo pesado ya está a 
   else if(H.pesadas.length) t=pend?(navigator.onLine?"Guardado en este equipo · enviando datos…":"Guardado en este equipo · se enviará cuando vuelva el internet"):"✓ Guardado y enviado";
   const el=$("#hh-l2"); el.textContent=t; el.classList.toggle("hidden",!t);
 }
+function opEnvio(c){   // estado de envío de un camión: lo ve el operario al terminar
+  if(!CFG.SCRIPT_URL) return ["",""];
+  const pend=c.hojas.some(h=>dirty(h)&&!ajena(h));
+  return pend?[navigator.onLine?"Enviando datos…":"Sin internet: se enviará solo cuando vuelva la señal. No borre los datos del navegador.","pe"]:["✓ Enviado al registro","ok"];
+}
 function drawQueue(){
   const n=HOJAS.filter(h=>dirty(h)&&!ajena(h)).length+Object.keys(LS.get(DESPQ,{})).length, c=$("#chip-q");
   const show = CFG.SCRIPT_URL && n;
   c.classList.toggle("hidden",!show);
   c.textContent = show?`⏳ ${n} por enviar`:"";
   estadoHoja();
+  const oe=$("#op-env"); if(oe&&OP&&OP.k){ const c=camionesHoy().find(x=>x.k===OP.k); if(c){ const [et,ec]=opEnvio(c); oe.textContent=et; oe.className="env "+ec; } }
   const w=$("#q-warn"); w.classList.toggle("hidden",!show);
   if(show) $("#q-txt").textContent=`⏳ Hay ${n} pesaje${n>1?"s":""} sin enviar. ${navigator.onLine?"Enviando datos…":"Se enviarán solos cuando vuelva el internet."} No cierre sesión ni borre los datos del navegador hasta que desaparezca este aviso.`;
 }
 function drawNet(){ const c=$("#chip-net"); const on=navigator.onLine; c.classList.toggle("off",!on); $("span",c).textContent=on?"Con conexión":"Sin conexión"; }
 
 /* ---------- toast ---------- */
-let tT; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(tT); tT=setTimeout(()=>t.classList.remove("on"),2600); }
+let tT; function toast(m,acc,fn){ const t=$("#toast"); t.textContent=m; t.classList.toggle("act",!!acc);
+  if(acc){ const b=document.createElement("button"); b.type="button"; b.textContent=acc; b.onclick=()=>{ t.classList.remove("on","act"); clearTimeout(tT); fn(); }; t.appendChild(b); }
+  t.classList.add("on"); clearTimeout(tT); tT=setTimeout(()=>t.classList.remove("on","act"),acc?7000:4000); }
 
 /* ---------- navegación ---------- */
 let TAB="hoja";
@@ -1483,7 +1506,9 @@ function drawOp(){
         const vac=c.hojas.filter(h=>!(h.pesadas||[]).length&&!ajena(h)&&can("borrarHoja")), xvac=vac.length?`<div style="margin:4px 0 10px">${vac.map(h=>`<span class="xh" data-delh="${h.id}">✕ quitar ${esc(h.puerta)} sin pesadas</span>`).join(" ")}</div>`:"";
         if(hecho&&!OP.mas){
           const hs=CFG.PUERTAS.filter(p=>hojaDe(c,p));
-          return `<div class="opt">Pesaje terminado</div><div class="doors">${hs.map(fila).join("")}</div>${xvac}
+          const kgT=r2(con.reduce((a,h)=>a+kgHoja(h),0)), nP=con.reduce((a,h)=>a+h.pesadas.length,0), [et,ec]=opEnvio(c);
+          return `<div class="card opfin"><b>✓ Pesaje terminado</b><div class="s">${fmt(kgT)} kg · ${nP} pesada${nP===1?"":"s"} · ${con.length} puerta${con.length===1?"":"s"}</div>${et?`<div class="env ${ec}" id="op-env">${et}</div>`:""}</div>
+            <div class="doors">${hs.map(fila).join("")}</div>${xvac}
             <div class="row2 opdec"><button class="btn sec xl" data-op="mas">Pesar en otra puerta</button>${can("aprobar")?`<button class="btn xl" data-gdesp="${esc(c.k)}">Generar despacho</button>`:""}</div>`;
         }
         const ps=OP.mas?CFG.PUERTAS.filter(p=>!hojaDe(c,p)):CFG.PUERTAS;
@@ -1624,7 +1649,7 @@ async function opTerminar(){
   if(pend) return toast("Falta pesar los pallets vacíos de "+pend+" pesada"+(pend>1?"s":"")+". Hágalo antes de terminar.");
   if(!abiertas.length&&!mias.some(h=>(h.pesadas||[]).length)) return toast("Todavía no pesó nada en este despacho.");
   for(const h of abiertas){ h.estado="cerrada"; await saveHoja(h); }
-  toast("Pesaje del camión terminado."+(navigator.onLine?" Enviando datos…":" Sin internet: se enviará solo cuando vuelva la señal."));
+  toast("Pesaje del camión terminado.");
   OP={v:"inicio",k:null}; drawOp();
 }
 
@@ -1693,7 +1718,7 @@ async function cerrarOReabrir(){
   const pend=pendHoja(H);
   if(pend) return toast(`Falta pesar los pallets vacíos de ${pend} pesada${pend>1?"s":""}. Hágalo antes de finalizar.`);
   H.estado="cerrada"; await saveHoja(H);
-  if(OPV()){ OP={v:"camion",k:dkOp(H)}; OPSRCH=false; H=null; showView(); return toast("Pesaje de esta puerta terminado."+(navigator.onLine?" Enviando datos…":" Sin internet: se enviará solo cuando vuelva la señal.")); }
+  if(OPV()){ const H0=H.puerta; OP={v:"camion",k:dkOp(H)}; OPSRCH=false; H=null; showView(); return toast(H0+" terminada."); }
   drawHoja();
   toast(CFG.SCRIPT_URL?(navigator.onLine?"Hoja cerrada. Enviando…":"Hoja cerrada. Se enviará cuando haya señal."):"Hoja cerrada (modo local: falta conectar la hoja de Google).");
 }
@@ -1722,7 +1747,8 @@ function openSheet(key){
   EDIT=null;
   $("#sh-name").textContent=CUR.name; $("#sh-sap").textContent=CUR.cod?"SAP "+CUR.cod:"Sin código SAP";
   $("#f-tu").innerHTML=CFG.UNIDADES.map(([c,n])=>`<option value="${c}">${esc(n)} (${c})</option>`).join("");
-  TARA = {t:"none"};            // por defecto: «Sin tara» seleccionado; el operario toca un peso solo si usa coche
+  TARA = {t:"val",v:null};      // la tara se elige siempre: peso del coche, «Sin tara» o «Tara al final» (evita guardar el bruto como neto por olvido)
+  NUEVA=null;
   $("#f-tu").value=LS.get("pesaje.lastTu",CFG.UNIDADES[0][0]);
   resetForm(); drawSheet(); $("#sheet").classList.remove("hidden");
   setTimeout(()=>$("#f-bruto").focus(),60);
@@ -1730,7 +1756,7 @@ function openSheet(key){
 function closeSheet(){ $("#sheet").classList.add("hidden"); CUR=null; EDIT=null; drawHoja(); }
 function resetForm(){
   EDIT=null; $("#f-bruto").value=""; $("#f-uni").value=""; $("#f-otra").value=""; $("#f-err").textContent="";
-  $("#f-title").textContent="Nueva pesada"; $("#f-add").textContent="Guardar pesada"; $("#f-cancel").classList.add("hidden");
+  $("#f-title").textContent="Nueva pesada"; $("#f-add").textContent="Guardar y pesar otro"; $("#f-cancel").classList.add("hidden"); $("#f-salir").classList.remove("hidden");
   if(TARA.t==="val"&&TARA.v!=null) $("#f-otra").value=TARA.v;   // la última tara usada queda escrita
   drawTaras(); drawPrev();
 }
@@ -1752,7 +1778,7 @@ function drawPrev(){
   const f=readForm(), el=$("#f-prev"); el.classList.remove("bad");
   if(isNaN(f.bruto)){ el.textContent="—"; return; }
   if(f.taraPend){ el.textContent=`${fmt(f.bruto)} kg bruto · la tara se descuenta al pesar los pallets vacíos`; return; }
-  if(f.tara==null||isNaN(f.tara)){ el.textContent="Elige o escribe la tara"; return; }
+  if(f.tara==null||isNaN(f.tara)){ el.textContent="Elija o escriba la tara"; return; }
   const n=r2(f.bruto-f.tara);
   el.textContent=`${fmt(f.bruto)} − ${fmt(f.tara)} = ${fmt(n)} kg`;
   if(n<=0) el.classList.add("bad");
@@ -1767,7 +1793,7 @@ function drawSheet(){
   $("#sh-list").innerHTML = L.length ? L.map((x,j)=>{
     const p=x.p, n=netoDe(p);
     const calc = p.taraPend ? `${fmt(p.bruto)} kg bruto` : (p.tara? `${fmt(p.bruto)} − ${fmt(p.tara)} = ${fmt(n)} kg` : `${fmt(n)} kg (sin tara)`);
-    return `<li class="${EDIT===p.id?"ed":""}"><span class="muted">${j+1}</span>
+    return `<li class="${EDIT===p.id?"ed":NUEVA===p.id?"nw":""}"><span class="muted">${j+1}</span>
       <div class="k ${p.taraPend?"pd":""}"><b>${p.taraPend?fmt(p.bruto):fmt(n)} kg</b>${p.uni?` · ${p.uni} ${p.tu||"UD"}`:""}<small>${p.taraPend?"⚠ tara al final · ":""}${calc}</small></div>
       <button class="ib" data-edit="${p.id}" aria-label="Editar">✎</button>
       <button class="ib del" data-del="${p.id}" aria-label="Borrar">🗑</button></li>`;
@@ -1798,12 +1824,22 @@ async function conjAplicar(){
   await saveHoja(H); conjModo(false); drawSheet(); drawHoja();
   toast("Se descontó el peso de los pallets vacíos: "+fmt(c.tot)+" kg entre "+c.n+" pallet"+(c.n>1?"s":"")+".");
 }
-async function addPesada(){
+let NUEVA=null;   // última pesada guardada: se resalta en la lista del residuo
+async function deshacerPesada(h,id){
+  if(aprobada(h)) return toast("Este despacho ya fue aprobado y no se puede cambiar. Pida al administrador que lo reabra.");
+  if(h.estado==="cerrada") return toast("Esta puerta ya está terminada. Reábrala para borrar la pesada.");
+  if(!h.pesadas.some(p=>p.id===id)) return;
+  h.pesadas=h.pesadas.filter(p=>p.id!==id); if(NUEVA===id) NUEVA=null;
+  await saveHoja(h);
+  if(H===h){ if(CUR&&!$("#sheet").classList.contains("hidden")) drawSheet(); drawHoja(); }
+  toast("Pesada deshecha.");
+}
+async function addPesada(salir){
   if(aprobada(H)) return toast("Este despacho ya fue aprobado y no se puede cambiar. Pida al administrador que lo reabra.");
   const f=readForm(), e=$("#f-err"); e.textContent="";
   if(isNaN(f.bruto)||f.bruto<=0) return void(e.textContent="Escriba el peso que marca la balanza (peso bruto).");
   if(!f.taraPend){
-    if(f.tara==null||isNaN(f.tara)||f.tara<0) return void(e.textContent="Escriba el peso del coche o toque «Sin tara».");
+    if(f.tara==null||isNaN(f.tara)||f.tara<0) return void(e.textContent="Elija la tara: toque el peso del coche, «Sin tara» o «Tara al final».");
     if(f.bruto-f.tara<=0) return void(e.textContent="El peso de la balanza debe ser mayor que el del coche o pallet vacío. Revise los pesos.");
   }
   const rec={key:CUR.key,cod:CUR.cod,res:CUR.name,cat:CUR.cat,bruto:r2(f.bruto),tara:f.taraPend?null:r2(f.tara),taraPend:f.taraPend,uni:f.uni,tu:f.uni?f.tu:"",ts:Date.now()};
@@ -1811,9 +1847,12 @@ async function addPesada(){
   else H.pesadas.push(Object.assign({id:uuid()},rec));
   if(rec.tara>0) rememberTara(rec.tara); TARA=rec.taraPend?{t:"fin"}:rec.tara===0?{t:"none"}:{t:"val",v:rec.tara};
   LS.set("pesaje.lastTu",f.tu);
-  const edited=!!EDIT;
+  const edited=!!EDIT, id=EDIT||H.pesadas[H.pesadas.length-1].id, h=H, neto=rec.taraPend?fmt(rec.bruto)+" kg bruto":fmt(r2(rec.bruto-rec.tara))+" kg";
   await saveHoja(H);
-  resetForm(); closeSheet(); toast((edited?"Pesada actualizada":"Pesada guardada")+" · "+rec.res);
+  NUEVA=id; resetForm();
+  if(salir===true) closeSheet(); else { drawSheet(); drawHoja(); $("#f-bruto").focus(); }
+  if(edited) toast("Pesada corregida · "+neto);
+  else toast("Pesada guardada · "+neto,"Deshacer",()=>deshacerPesada(h,id));
 }
 function editPesada(id){
   if(aprobada(H)) return toast("Este despacho ya fue aprobado y no se puede cambiar. Pida al administrador que lo reabra.");
@@ -1821,7 +1860,7 @@ function editPesada(id){
   EDIT=id; $("#f-bruto").value=p.bruto; $("#f-uni").value=p.uni||"";
   if(p.taraPend){ TARA={t:"fin"}; $("#f-otra").value=""; } else if(!p.tara){ TARA={t:"none"}; $("#f-otra").value=""; } else { TARA={t:"val",v:p.tara}; $("#f-otra").value=p.tara; }
   if(p.tu) $("#f-tu").value=p.tu;
-  $("#f-title").textContent="Corregir pesada"; $("#f-add").textContent="Guardar cambio"; $("#f-cancel").classList.remove("hidden");
+  $("#f-title").textContent="Corregir pesada"; $("#f-add").textContent="Guardar cambio"; $("#f-cancel").classList.remove("hidden"); $("#f-salir").classList.add("hidden");
   drawTaras(); drawPrev(); drawSheet(); $("#f-bruto").focus();
 }
 let delAsk=null;
@@ -2550,13 +2589,14 @@ $("#b-back").addEventListener("click",()=>{ if(OPV()){ OP={v:"camion",k:dkOp(H)}
 $("#b-close").addEventListener("click",cerrarOReabrir);
 $("#q").addEventListener("input",()=>drawHoja());
 $("#sh-x").addEventListener("click",closeSheet);
-$("#f-add").addEventListener("click",addPesada);
+$("#f-add").addEventListener("click",()=>addPesada(false));
+$("#f-salir").addEventListener("click",()=>addPesada(true));
 $("#f-cancel").addEventListener("click",()=>{ resetForm(); drawSheet(); });
 $("#f-bruto").addEventListener("input",drawPrev);
 $("#f-uni").addEventListener("input",drawPrev);
 $("#cj-kg").addEventListener("input",conjPrev);
 $("#f-otra").addEventListener("input",()=>{ TARA={t:"val",v:num($("#f-otra").value)}; drawTaras(); drawPrev(); });
-$("#f-bruto").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addPesada(); } });
+$("#f-bruto").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addPesada(false); } });
 $("#d-go").addEventListener("click",buscarDespachos);
 $("#d-numgo").addEventListener("click",buscarPorNumero);
 $("#d-num").addEventListener("keydown",ev=>{ if(ev.key==="Enter"){ ev.preventDefault(); buscarPorNumero(); } });
@@ -2568,7 +2608,7 @@ $("#d-fecha").addEventListener("change",dlDesp);
 $("#d-placa").addEventListener("input",e=>{ e.target.value=e.target.value.toUpperCase(); });
 $("#chip-q").addEventListener("click",()=>{ toast("Sincronizando…"); sync(); });
 window.addEventListener("online",()=>{ drawNet(); if(!AUTH||SES){ sync(); cargaCatalogo(); refrescaDia(); } drawQueue(); });
-window.addEventListener("offline",()=>{ drawNet(); ACS.forEach(a=>a.abort()); });
+window.addEventListener("offline",()=>{ drawNet(); ACS.forEach(a=>a.abort()); drawQueue(); });
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ drawNet(); sync(); refrescaDia(); } });
 setInterval(()=>{ if(!document.hidden) refrescaDia(); },30000);
 setInterval(()=>{ if(navigator.onLine && (HOJAS.some(dirty)||Object.keys(LS.get(DESPQ,{})).length)) sync(); },45000);
