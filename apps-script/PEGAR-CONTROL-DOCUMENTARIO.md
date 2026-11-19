@@ -1,4 +1,4 @@
-# Control documentario (etapa 1): cómo pegarlo (solo en el script de PRUEBA)
+# Control documentario (etapas 1 y 2): cómo pegarlo (solo en el script de PRUEBA)
 
 Orden: primero el script, después la app. No toques el script de la app real.
 
@@ -24,3 +24,11 @@ Orden: primero el script, después la app. No toques el script de la app real.
 - Un borrador de inspección guardado en el teléfono antes de este cambio se descarta.
 - Si solo actualizas la app y no el script, la app avisa «El servidor todavía no tiene el módulo…» y no deja empezar inspecciones. No se pierde nada.
 - Seguro de prueba (`SOLO_ESTA_HOJA = true` en Code.gs) sigue activo.
+
+## Etapa 2 (crear documentos)
+Se pegan los mismos tres archivos (Code.gs, ControlDoc.gs, Inspecciones.gs) y se publica una Nueva versión.
+- **Nuevo documento** en Control documentario: código, título, tipo y responsable.
+- **Formato**: nace con su borrador 01 (plantilla mínima), se edita, se aprueba y aparece para llenarse en Inspecciones (se elige el formato).
+- **Procedimiento / Instructivo**: cada versión se sube como PDF (máximo 8 MB), con motivo; al aprobar queda vigente. En Drive quedan solo la vigente y la anterior.
+- La pestaña Inspecciones suma una columna «codigo» al final (las filas antiguas se toman como SGA.R.G.002).
+- Si solo se actualiza la app, la app avisa que falta el script y no deja empezar inspecciones; no se pierde nada.
