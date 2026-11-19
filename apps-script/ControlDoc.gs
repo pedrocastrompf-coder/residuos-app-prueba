@@ -17,6 +17,19 @@ const DOC_TIPOS = ["Formato","Procedimiento","Instructivo"];
 const DOC_RAIZ = "Control documentario";
 const DOC_INSPECCION = "SGA.R.G.002";
 const DOC_MAX_DEF = 45000;   // caracteres de una definición (celda de Sheets: 50 000)
+const DOC_MAX_PDF = 8 * 1024 * 1024;   // PDF de un procedimiento o instructivo (bytes)
+// Formato = se llena en la app (su contenido es una «definición»). Procedimiento e Instructivo = cada versión es un PDF subido.
+function docEsFormato_(tipo){ return tipo === "Formato"; }
+function docPdfData_(s){
+  const m = /^data:application\/pdf;base64,([A-Za-z0-9+\/]+={0,2})$/.exec(String(s || "")); if (!m) return null;
+  const b64 = m[1], bytes = Math.floor(b64.length * 3 / 4) - ((b64.match(/=+$/) || [""])[0].length);
+  return bytes >= 1 && bytes <= DOC_MAX_PDF ? {b64:b64, bytes:bytes} : null;
+}
+// plantilla mínima de un formato nuevo (se completa en el editor)
+function docPlantilla_(titulo){
+  return {titulo:titulo, puntos:null, criterios:{grupos:[{nombre:"Criterios de verificación", items:[{t:"Escriba aquí el primer criterio", h:"Otro", auto:""}]}]},
+    resultado:{modo:"porcentaje", cortes:{sat:90, ace:70}}, firmas:{insp:"Responsable de la inspección", resp:"Responsable del área inspeccionada"}};
+}
 
 // Valida y normaliza una definición de formato. Devuelve {ok, def} o {ok:false, error, campo}.
 function docValidarDef_(d){
@@ -84,6 +97,7 @@ function docValidarDef_(d){
 // Resumen automático de qué cambió entre dos definiciones (para el control de cambios)
 function docResumenCambios_(a, b){
   if (!a) return "Primera versión.";
+  if (!b.criterios || !a.criterios) return "Nuevo PDF del documento.";   // procedimientos e instructivos
   const R = [];
   if (a.titulo !== b.titulo) R.push("Título: «" + a.titulo + "» → «" + b.titulo + "»");
   const txt = d => { const L = []; d.criterios.grupos.forEach(g => g.items.forEach(i => L.push(i.t))); return L; };
@@ -145,8 +159,10 @@ function docMeta_(v){
 }
 
 // La primera vez: crea el documento del formato de inspección con su versión 06 (vigente) y la 07 (borrador por aprobar)
-function docSembrar_(){
+// yaBloqueado: la petición ya tiene el candado del script (acciones que escriben); las lecturas no lo tienen y lo piden aquí
+function docSembrar_(yaBloqueado){
   const sh = docHoja_(); if (sh.getLastRow() >= 2) return;
+  if (yaBloqueado) return docSembrarAhora_(sh);
   // solo la primera vez: con candado, para que dos pedidos simultáneos (lecturas sin candado) no carguen el documento dos veces
   const lock = LockService.getScriptLock(); if (!lock.tryLock(20000)) return;
   try{ if (sh.getLastRow() < 2) docSembrarAhora_(sh); } finally { lock.releaseLock(); }
@@ -202,6 +218,42 @@ function docVersion_(b, u){
   return {ok:true, version:Object.assign(docMeta_(v), {titulo:d ? d.titulo : "", definicion:JSON.parse(v.definicion)})};
 }
 
+// Formatos con versión vigente, para elegir cuál llenar (con su definición)
+function docFormatosVigentes_(u){
+  docSembrar_();
+  const V = docFilas_(verHoja_(), VER_COLS);
+  const L = docFilas_(docHoja_(), DOC_COLS).filter(d => docEsFormato_(d.tipo) && d.versionId).map(d => {
+    const v = V.filter(x => x.versionId === d.versionId)[0]; if (!v) return null;
+    let def = null; try{ def = JSON.parse(v.definicion); }catch(e){}
+    return def && def.criterios ? {codigo:d.codigo, titulo:d.titulo, version:v.version, versionId:v.versionId, fechaAprobacion:v.fechaAprobacion, definicion:def} : null;
+  }).filter(x => x);
+  return {ok:true, formatos:L};
+}
+
+// Crea un documento nuevo. Un formato nace con su borrador 01 (plantilla mínima); un procedimiento o instructivo, sin versiones hasta subir su PDF.
+function docCrear_(b, u){
+  u = hzU_(u); docSembrar_(true);   // doc_crear corre con el candado del script (no está en SIN_TURNO)
+  const codigo = hzTxt_(b.codigo).toUpperCase(), titulo = hzTxt_(b.titulo), tipo = String(b.tipo || ""), resp = hzTxt_(b.responsable);
+  if (!/^[A-Z0-9][A-Z0-9._-]{2,29}$/.test(codigo)) return {ok:false, error:"codigo_invalido"};
+  if (titulo.length < 3 || titulo.length > 80) return {ok:false, error:"titulo_invalido"};
+  if (DOC_TIPOS.indexOf(tipo) < 0) return {ok:false, error:"tipo_invalido"};
+  if (resp.length < 3 || resp.length > 60) return {ok:false, error:"responsable_invalido"};
+  {
+    if (docFilas_(docHoja_(), DOC_COLS).some(d => d.codigo.toUpperCase() === codigo)) return {ok:false, error:"codigo_existe"};
+    const ahora = hzAhora_();
+    docHoja_().appendRow([codigo, titulo, tipo, "", "", "", resp, ahora]);
+    docCambio_(codigo, "", "Documento creado", u, "", tipo + " · " + titulo + " · responsable: " + resp);
+    let versionId = "";
+    if (docEsFormato_(tipo)){
+      versionId = "v-" + Utilities.getUuid().slice(0, 8);
+      verHoja_().appendRow([versionId, codigo, "01", "Borrador", JSON.stringify(docPlantilla_(titulo)), u.usuario, u.nombre, ahora, ahora, "", "", "", "", "Creación del documento.", ""]);
+      docCambio_(codigo, "01", "Borrador creado", u, "Creación del documento.", "Plantilla inicial.");
+    }
+    bitacora_(u, "Documento creado", codigo + " · " + tipo);
+    return {ok:true, codigo:codigo, versionId:versionId};
+  }
+}
+
 function docVigente_(b, u){
   docSembrar_();
   const x = docVigenteDe_(String(b.codigo || DOC_INSPECCION)); if (!x) return {ok:false, error:"no_existe"};
@@ -210,19 +262,33 @@ function docVigente_(b, u){
 
 // Crea o actualiza el borrador del documento (uno por documento)
 function docBorradorGuardar_(b, u){
-  u = hzU_(u); docSembrar_();
+  u = hzU_(u); docSembrar_(true);
   const codigo = String(b.codigo || "");
   const d = docFilas_(docHoja_(), DOC_COLS).filter(x => x.codigo === codigo)[0]; if (!d) return {ok:false, error:"no_existe"};
   const motivo = hzTxt_(b.motivo); if (motivo.length < 5 || motivo.length > 500) return {ok:false, error:"motivo_invalido"};
-  const val = docValidarDef_(b.definicion); if (!val.ok) return val;
+  const esF = docEsFormato_(d.tipo);
+  let val;
+  if (esF){ val = docValidarDef_(b.definicion); if (!val.ok) return val; }
+  else val = {def:{titulo:d.titulo}};
+  const pdf = esF ? null : (b.pdf ? docPdfData_(b.pdf) : null);
+  if (!esF && b.pdf && !pdf) return {ok:false, error:"pdf_invalido"};
   const sh = verHoja_(), V = docFilas_(sh, VER_COLS).filter(v => v.codigo === codigo), ahora = hzAhora_();
   let br = V.filter(v => v.estado === "Borrador")[0];
+  if (!esF && !pdf && !(br && br.pdf)) return {ok:false, error:"pdf_requerido"};
+  const version = br ? br.version : docSigVersion_(V);
+  let pdfId = br ? br.pdf : "";
+  if (pdf){                                                   // el PDF del borrador va a Drive; reemplaza al anterior del mismo borrador
+    const carpeta = hzSub_(hzSub_(DriveApp.getRootFolder(), DOC_RAIZ), codigo);
+    const f = carpeta.createFile(Utilities.newBlob(Utilities.base64Decode(pdf.b64), "application/pdf", codigo + " v" + version + " (borrador).pdf"));
+    if (pdfId){ try{ DriveApp.getFileById(pdfId).setTrashed(true); }catch(e){} }
+    pdfId = f.getId();
+  }
   if (br){
-    br.definicion = JSON.stringify(val.def); br.motivo = motivo; br.actualizado = ahora; br.editor = u.usuario; br.editorNombre = u.nombre;
+    br.definicion = JSON.stringify(val.def); br.motivo = motivo; br.actualizado = ahora; br.editor = u.usuario; br.editorNombre = u.nombre; br.pdf = pdfId;
     docEscribir_(sh, VER_COLS, br);
   } else {
-    br = {versionId:"v-" + Utilities.getUuid().slice(0, 8), codigo:codigo, version:docSigVersion_(V), estado:"Borrador", definicion:JSON.stringify(val.def),
-      editor:u.usuario, editorNombre:u.nombre, creado:ahora, actualizado:ahora, aprobador:"", aprobadorNombre:"", aprobado:"", fechaAprobacion:"", motivo:motivo, pdf:""};
+    br = {versionId:"v-" + Utilities.getUuid().slice(0, 8), codigo:codigo, version:version, estado:"Borrador", definicion:JSON.stringify(val.def),
+      editor:u.usuario, editorNombre:u.nombre, creado:ahora, actualizado:ahora, aprobador:"", aprobadorNombre:"", aprobado:"", fechaAprobacion:"", motivo:motivo, pdf:pdfId};
     sh.appendRow(VER_COLS.map(c => br[c]));
   }
   const vig = docVersionPorId_(d.versionId);
@@ -236,6 +302,7 @@ function docBorradorDescartar_(b, u){
   const sh = verHoja_(), v = docFilas_(sh, VER_COLS).filter(x => x.versionId === String(b.versionId))[0];
   if (!v) return {ok:false, error:"no_existe"};
   if (v.estado !== "Borrador") return {ok:false, error:"estado_invalido"};
+  if (v.pdf){ try{ DriveApp.getFileById(v.pdf).setTrashed(true); }catch(e){} }
   sh.deleteRow(v._fila);
   docCambio_(v.codigo, v.version, "Borrador descartado", u, "", "");
   bitacora_(u, "Documento: borrador descartado", v.codigo + " v" + v.version);
@@ -249,12 +316,17 @@ function docAprobar_(b, u){
   if (!v) return {ok:false, error:"no_existe"};
   if (v.estado !== "Borrador") return {ok:false, error:"estado_invalido"};
   const dsh = docHoja_(), d = docFilas_(dsh, DOC_COLS).filter(x => x.codigo === v.codigo)[0]; if (!d) return {ok:false, error:"no_existe"};
+  if (!docEsFormato_(d.tipo) && !v.pdf) return {ok:false, error:"pdf_requerido"};
   const ahora = hzAhora_(), hoy = hzHoy_();
   const ant = V.filter(x => x.versionId === d.versionId)[0];
   if (ant){ ant.estado = "Obsoleta"; ant.actualizado = ahora; docEscribir_(sh, VER_COLS, ant); }
   v.estado = "Vigente"; v.aprobador = u.usuario; v.aprobadorNombre = u.nombre; v.aprobado = ahora; v.fechaAprobacion = hoy; v.actualizado = ahora;
   docEscribir_(sh, VER_COLS, v);
   d.version = v.version; d.versionId = v.versionId; d.fechaAprobacion = hoy; docEscribir_(dsh, DOC_COLS, d);
+  if (!docEsFormato_(d.tipo)){                                // el PDF subido pasa a ser el de la versión vigente
+    try{ DriveApp.getFileById(v.pdf).setName(v.codigo + " v" + v.version + ".pdf"); }catch(e){}
+    docPodar_(v.codigo);
+  }
   docCambio_(v.codigo, v.version, "Aprobada (vigente)", u, v.motivo,
     docResumenCambios_(ant ? JSON.parse(ant.definicion) : null, JSON.parse(v.definicion)) + (ant ? " · La versión " + ant.version + " queda obsoleta." : ""));
   bitacora_(u, "Documento aprobado", v.codigo + " v" + v.version);
@@ -267,16 +339,23 @@ function docPdfGuardar_(b, u){
   const sh = verHoja_(), V = docFilas_(sh, VER_COLS), v = V.filter(x => x.versionId === String(b.versionId))[0];
   if (!v) return {ok:false, error:"no_existe"};
   if (v.estado !== "Vigente") return {ok:false, error:"estado_invalido"};
-  const p = hzDataUrl_(b.pdf); if (!p || p.mime !== "application/pdf") return {ok:false, error:"pdf_invalido"};
+  const d = docFilas_(docHoja_(), DOC_COLS).filter(x => x.codigo === v.codigo)[0];
+  if (!d || !docEsFormato_(d.tipo)) return {ok:false, error:"estado_invalido"};   // los PDF de procedimientos se suben, no se generan
+  const p = docPdfData_(b.pdf); if (!p) return {ok:false, error:"pdf_invalido"};
   const carpeta = hzSub_(hzSub_(DriveApp.getRootFolder(), DOC_RAIZ), v.codigo);
   const f = carpeta.createFile(Utilities.newBlob(Utilities.base64Decode(p.b64), "application/pdf", v.codigo + " v" + v.version + ".pdf"));
   if (v.pdf){ try{ DriveApp.getFileById(v.pdf).setTrashed(true); }catch(e){} }
   v.pdf = f.getId(); docEscribir_(sh, VER_COLS, v);
-  // la anterior = la obsoleta aprobada más reciente; las demás pierden su PDF (sus datos se conservan)
-  const obs = V.filter(x => x.codigo === v.codigo && x.estado === "Obsoleta").sort((a, c) => a.aprobado < c.aprobado ? 1 : -1);
-  obs.slice(1).forEach(x => { if (x.pdf){ try{ DriveApp.getFileById(x.pdf).setTrashed(true); }catch(e){} x.pdf = ""; docEscribir_(sh, VER_COLS, x); } });
+  docPodar_(v.codigo);
   docCambio_(v.codigo, v.version, "PDF guardado en Drive", u, "", DOC_RAIZ + "/" + v.codigo);
   return {ok:true};
+}
+
+// En Drive se conservan solo el PDF de la vigente y el de la anterior (la obsoleta aprobada más reciente); las demás versiones conservan sus datos
+function docPodar_(codigo){
+  const sh = verHoja_(), V = docFilas_(sh, VER_COLS);
+  const obs = V.filter(x => x.codigo === codigo && x.estado === "Obsoleta").sort((a, c) => a.aprobado < c.aprobado ? 1 : -1);
+  obs.slice(1).forEach(x => { if (x.pdf){ try{ DriveApp.getFileById(x.pdf).setTrashed(true); }catch(e){} x.pdf = ""; docEscribir_(sh, VER_COLS, x); } });
 }
 
 function docPdf_(b, u){
@@ -330,4 +409,4 @@ const DOC_DEF_07 = {titulo:"Inspección ambiental de área de trabajo", puntos:D
     {t:"Sin fugas de agua, vapor, aire o gas; equipos apagados si no se usan; flujómetros operativos", h:"Uso de agua y energía"}]}]},
   resultado:{modo:"porcentaje", cortes:{sat:90, ace:70}}, firmas:DOC_FIRMAS_INSPECCION};
 
-if (typeof module !== "undefined") module.exports = {docValidarDef_, docResumenCambios_, docSigVersion_, DOC_DEF_06, DOC_DEF_07};
+if (typeof module !== "undefined") module.exports = {docPdfData_, docPlantilla_, docValidarDef_, docResumenCambios_, docSigVersion_, DOC_DEF_06, DOC_DEF_07};

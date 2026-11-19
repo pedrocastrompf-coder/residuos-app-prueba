@@ -8,7 +8,7 @@
  */
 
 // ===================== 1. REGLAS =====================
-const INSP_COLS = ["id","sede","creado","fecha","hora","area","inspectorUsuario","inspectorNombre","respNombre","respCargo","puntos","criterios","pctConf","calificacion","hallazgos","inspectorCargo","firmaInsp","firmaResp","versionId","resultadoTexto"];
+const INSP_COLS = ["id","sede","creado","fecha","hora","area","inspectorUsuario","inspectorNombre","respNombre","respCargo","puntos","criterios","pctConf","calificacion","hallazgos","inspectorCargo","firmaInsp","firmaResp","versionId","resultadoTexto","codigo"];
 const INSP_LIV = 16;   // columnas que lee el historial antes de las firmas (que pesan); versionId y resultadoTexto se leen aparte
 const INSP_MAX_FIRMA = 30000;   // caracteres máximos de una firma (celda de Sheets: 50 000)
 const INSP_RES = ["C","NC","NA"];
@@ -30,7 +30,7 @@ function inspCalificacion_(pct, cortes){
 function inspValidar_(b){
   b = b || {};
   if (!hzIdValido_(b.id) || String(b.id).length > 50) return {ok:false, error:"id_invalido"};
-  const fv = docDefAprobada_(b.versionId); if (!fv) return {ok:false, error:"formato_invalido"};
+  const fv = docDefAprobada_(b.versionId); if (!fv || !fv.def.criterios) return {ok:false, error:"formato_invalido"};
   const def = fv.def;
   const area = inspTxt_(b.area); if (!area || area.length > 40) return {ok:false, error:"area_invalida"};
   const respNombre = inspTxt_(b.respNombre), respCargo = inspTxt_(b.respCargo);
@@ -83,7 +83,7 @@ function inspValidar_(b){
     resultadoTexto = String(b.resultadoTexto == null ? "" : b.resultadoTexto).trim();
     if (resultadoTexto.length < 10 || resultadoTexto.length > 1500) return {ok:false, error:"resultado_invalido"};
   }
-  return {ok:true, v:{id:String(b.id), versionId:fv.versionId, def:def, area:area, respNombre:respNombre, respCargo:respCargo, inspCargo:inspCargo,
+  return {ok:true, v:{id:String(b.id), versionId:fv.versionId, codigo:fv.codigo, def:def, area:area, respNombre:respNombre, respCargo:respCargo, inspCargo:inspCargo,
     firmaInsp:b.firmaInsp, firmaResp:b.firmaResp, puntos:puntos, crit:crit, hallazgos:hallazgos, resultadoTexto:resultadoTexto}};
 }
 
@@ -110,7 +110,7 @@ function inspGuardar_(b, u){
   const porPct = v.def.resultado.modo !== "texto";
   const pct = porPct ? inspPorcentaje_(v.crit) : "", cal = porPct ? inspCalificacion_(pct, v.def.resultado.cortes) : "";
   sh.appendRow([v.id, SEDE, ahora, ahora.slice(0,10), ahora.slice(11,16), v.area, u.usuario, u.nombre, v.respNombre, v.respCargo,
-    JSON.stringify(v.puntos), JSON.stringify(v.crit), pct, cal, JSON.stringify(ids), v.inspCargo, v.firmaInsp, v.firmaResp, v.versionId, v.resultadoTexto]);
+    JSON.stringify(v.puntos), JSON.stringify(v.crit), pct, cal, JSON.stringify(ids), v.inspCargo, v.firmaInsp, v.firmaResp, v.versionId, v.resultadoTexto, v.codigo]);
   bitacora_(u, "Inspección registrada", v.id + " · " + v.area + " · " + (porPct ? (pct === "" ? "s/d" : pct + "%") : "resultado en texto") + " · " + ids.length + " hallazgo(s)");
   return {ok:true, id:v.id, pct:pct, calificacion:cal, hallazgos:ids};
 }
@@ -120,14 +120,14 @@ function inspListar_(u){
   const todas = u.rol === "Inspector" || u.rol === "Administrador";
   // se leen las columnas del historial y, aparte, versionId y resultadoTexto (las firmas, que pesan, no se leen)
   const sh = inspHoja_(), n = sh.getLastRow(), jV = INSP_COLS.indexOf("versionId");
-  const A = n < 2 ? [] : sh.getRange(2, 1, n - 1, INSP_LIV).getValues(), B = n < 2 ? [] : sh.getRange(2, jV + 1, n - 1, 2).getValues();
+  const A = n < 2 ? [] : sh.getRange(2, 1, n - 1, INSP_LIV).getValues(), B = n < 2 ? [] : sh.getRange(2, jV + 1, n - 1, 3).getValues();
   const L = A.map((r, i) => {
     const o = {}; INSP_COLS.slice(0, INSP_LIV).forEach((c, j) => o[c] = String(r[j] == null ? "" : r[j]));
-    o.versionId = String(B[i][0] == null ? "" : B[i][0]); o.resultadoTexto = String(B[i][1] == null ? "" : B[i][1]); return o;
+    o.versionId = String(B[i][0] == null ? "" : B[i][0]); o.resultadoTexto = String(B[i][1] == null ? "" : B[i][1]); o.codigo = String(B[i][2] || "") || DOC_INSPECCION; return o;
   }).filter(o => o.sede === SEDE && (todas || o.inspectorUsuario === u.usuario)).reverse().slice(0, 300);
   const out = L.map(o => ({id:o.id, creado:o.creado, fecha:o.fecha, hora:o.hora, area:o.area, inspectorNombre:o.inspectorNombre,
     respNombre:o.respNombre, respCargo:o.respCargo, inspectorCargo:o.inspectorCargo, puntos:JSON.parse(o.puntos || "[]"), criterios:JSON.parse(o.criterios || "[]"),
-    pct:o.pctConf, calificacion:o.calificacion, hallazgos:JSON.parse(o.hallazgos || "[]"), versionId:o.versionId, resultadoTexto:o.resultadoTexto}));
+    pct:o.pctConf, calificacion:o.calificacion, hallazgos:JSON.parse(o.hallazgos || "[]"), versionId:o.versionId, resultadoTexto:o.resultadoTexto, codigo:o.codigo}));
   return {ok:true, inspecciones:out};
 }
 

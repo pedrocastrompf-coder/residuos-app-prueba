@@ -993,7 +993,7 @@ function guardarHoja_(b, u){
   return {ok:true};
 }
 
-const SIN_TURNO = ["usuarios_listar","actividad_listar","plantas","hallazgos_listar","hallazgo_foto","areas_listar","inspecciones_listar","inspeccion_firmas","docs_listar","doc_detalle","doc_version","doc_vigente","doc_pdf"];
+const SIN_TURNO = ["usuarios_listar","actividad_listar","plantas","hallazgos_listar","hallazgo_foto","areas_listar","inspecciones_listar","inspeccion_firmas","docs_listar","doc_detalle","doc_version","doc_vigente","doc_pdf","formatos_vigentes"];
 function doPost(e){
   let b0 = null; try{ b0 = JSON.parse(e.postData.contents); }catch(err){ return json_({ok:false, error:"formato"}); }
   const lock = SIN_TURNO.indexOf(b0.action) >= 0 ? {releaseLock:function(){}} : LockService.getScriptLock();
@@ -1036,6 +1036,8 @@ function doPost(e){
     if (A === "doc_detalle") return puede_(u.rol,"doc_ver") ? json_(docDetalle_(b, u)) : no;
     if (A === "doc_version") return verDocs ? json_(docVersion_(b, u)) : no;
     if (A === "doc_vigente") return verDocs ? json_(docVigente_(b, u)) : no;
+    if (A === "formatos_vigentes") return verDocs ? json_(docFormatosVigentes_(u)) : no;
+    if (A === "doc_crear") return puede_(u.rol,"doc_editar") ? json_(docCrear_(b, u)) : no;
     if (A === "doc_pdf") return puede_(u.rol,"doc_ver") ? json_(docPdf_(b, u)) : no;
     if (A === "doc_borrador_guardar") return puede_(u.rol,"doc_editar") ? json_(docBorradorGuardar_(b, u)) : no;
     if (A === "doc_borrador_descartar") return puede_(u.rol,"doc_editar") ? json_(docBorradorDescartar_(b, u)) : no;
