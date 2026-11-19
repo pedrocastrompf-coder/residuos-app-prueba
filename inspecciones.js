@@ -18,7 +18,7 @@ const ERR = {
   clave:"El servidor no reconoce esta acción. Falta actualizar el script (Code.gs, ControlDoc.gs e Inspecciones.gs) y publicar una nueva versión."
 };
 const S = {falta:"", vista:"lista", lista:null, t:0, cargando:false, areas:null, F:null, enviando:false, err:"", sel:null, paso:0, fin:false,
-  fmt:null, fmtErr:"", defs:{}, q:{txt:"", cal:"", desde:"", hasta:""}};
+  fmt:null, fmts:null, fmtErr:"", defs:{}, q:{txt:"", cal:"", desde:"", hasta:""}};
 
 const st = document.createElement("style");
 st.textContent = `
@@ -78,20 +78,23 @@ const colsDe = def => def.puntos ? def.puntos.columnas : [];
 const nAuto = def => { const i = items(def).filter(x => x.auto === "puntos")[0]; return i ? i.n : 0; };
 const lsGet = k => { try{ const t = localStorage.getItem(k); return t ? JSON.parse(t) : null; }catch(e){ return null; } };
 const lsSet = (k, v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
-// versión vigente: se pide al servidor y se guarda en el teléfono para trabajar sin señal
+// formatos vigentes que se pueden llenar: se piden al servidor y se guardan en el teléfono para trabajar sin señal
 async function cargaFmt(){
   try{
-    const j = await postJ({action:"doc_vigente", codigo:DOC});
-    if(j && j.ok){ const f = {codigo:j.codigo, version:j.version, versionId:j.versionId, fechaAprobacion:j.fechaAprobacion, def:j.definicion};
-      S.fmt = f; S.fmtErr = ""; S.defs[f.versionId] = f; lsSet(FMT_K + "vigente", f); lsSet(FMT_K + f.versionId, f); }
-    else if(j && !(j.error === "sesion" || j.error === "cambiar_clave")) S.fmtErr = ERR[j.error] || "No se pudo cargar el formato vigente.";
-  }catch(e){ if(!S.fmt) S.fmtErr = "Sin señal: no se pudo cargar el formato vigente."; }
-  if(!S.fmt){ const c = lsGet(FMT_K + "vigente"); if(c){ S.fmt = c; S.defs[c.versionId] = c; } }
+    const j = await postJ({action:"formatos_vigentes"});
+    if(j && j.ok){
+      S.fmts = j.formatos.map(x => ({codigo:x.codigo, titulo:x.titulo, version:x.version, versionId:x.versionId, fechaAprobacion:x.fechaAprobacion, def:x.definicion}));
+      S.fmtErr = ""; S.fmts.forEach(f => { S.defs[f.versionId] = f; lsSet(FMT_K + f.versionId, f); }); lsSet(FMT_K + "lista", S.fmts);
+    }
+    else if(j && !(j.error === "sesion" || j.error === "cambiar_clave")) S.fmtErr = ERR[j.error] || "No se pudieron cargar los formatos vigentes.";
+  }catch(e){ if(!S.fmts) S.fmtErr = "Sin señal: no se pudieron cargar los formatos vigentes."; }
+  if(!S.fmts){ const c = lsGet(FMT_K + "lista"); if(c){ S.fmts = c; c.forEach(f => S.defs[f.versionId] = f); } }
+  S.fmt = (S.fmts || []).filter(f => f.codigo === DOC)[0] || (S.fmts || [])[0] || null;   // por defecto, la inspección de área
   if(TAB === "insp" && S.vista === "lista") pintaLista();
 }
 // versión con que se hizo una inspección (para verla y reimprimirla igual)
 async function fmtDe(versionId){
-  if(!versionId) return S.fmt;                              // inspecciones de prueba antiguas, sin versión: se muestran con la vigente
+  if(!versionId) return (S.fmts || []).filter(f => f.codigo === DOC)[0] || S.fmt;                              // inspecciones de prueba antiguas, sin versión: se muestran con la vigente
   if(S.defs[versionId]) return S.defs[versionId];
   const c = lsGet(FMT_K + versionId); if(c) return (S.defs[versionId] = c);
   const j = await postJ({action:"doc_version", versionId:versionId});
@@ -155,12 +158,13 @@ function repinta(){
   if(!box() || TAB !== "insp") return;
   if(S.vista === "form") return pintaForm();
   if(S.vista === "detalle") return pintaDetalle();
+  if(S.vista === "elegir") return pintaElegir();
   pintaLista();
 }
 const resumen = i => i.resultadoTexto ? "Resultado en texto" : (i.pct === "" ? "s/d" : i.pct + " %");
 function filtradas(){
   const q = S.q, t = q.txt.trim().toLowerCase();
-  return (S.lista || []).filter(i => (!t || (i.area + " " + i.inspectorNombre + " " + i.respNombre).toLowerCase().indexOf(t) >= 0)
+  return (S.lista || []).filter(i => (!t || (i.area + " " + i.inspectorNombre + " " + i.respNombre + " " + (i.codigo || "")).toLowerCase().indexOf(t) >= 0)
     && (!q.cal || i.calificacion === q.cal) && (!q.desde || i.fecha >= q.desde) && (!q.hasta || i.fecha <= q.hasta));
 }
 function htmlLista(){
@@ -168,25 +172,30 @@ function htmlLista(){
   if(!S.lista.length) return `<div class="card muted">Todavía no hay inspecciones. Toque «Nueva inspección» para registrar la primera.</div>`;
   const L = filtradas();
   return L.length ? L.map(i =>
-    `<button class="in-row" data-in-ver="${esc(i.id)}"><div class="l1"><b>${esc(i.area)}</b><span class="hz-b ${i.resultadoTexto ? "abi" : claseCal(i.calificacion) === "sat" ? "cer" : claseCal(i.calificacion) === "ace" ? "abi" : "venc"}">${esc(resumen(i))}</span></div><div class="m" style="font-size:12.5px;color:var(--gray)">${fecha(i.fecha)} ${esc(i.hora)} · ${esc(i.inspectorNombre)}${i.calificacion ? " · " + esc(i.calificacion) : ""} · ${(i.hallazgos || []).length} hallazgo(s)</div></button>`).join("")
+    `<button class="in-row" data-in-ver="${esc(i.id)}"><div class="l1"><b>${esc(i.area)}</b><span class="hz-b ${i.resultadoTexto ? "abi" : claseCal(i.calificacion) === "sat" ? "cer" : claseCal(i.calificacion) === "ace" ? "abi" : "venc"}">${esc(resumen(i))}</span></div><div class="m" style="font-size:12.5px;color:var(--gray)">${S.fmts && S.fmts.length > 1 ? esc(i.codigo || DOC) + " · " : ""}${fecha(i.fecha)} ${esc(i.hora)} · ${esc(i.inspectorNombre)}${i.calificacion ? " · " + esc(i.calificacion) : ""} · ${(i.hallazgos || []).length} hallazgo(s)</div></button>`).join("")
     : `<div class="card muted">Ninguna inspección coincide con la búsqueda.</div>`;
 }
 function pintaLista(){
   const b = leeBorrador(), q = S.q;
   box().innerHTML =
     `<div class="in-top"><button class="btn" data-in="nueva" ${S.fmt ? "" : "disabled"}>＋ Nueva inspección</button></div>` +
-    (S.fmt ? "" : `<div class="${S.fmtErr ? "err" : "card muted"}">${esc(S.fmtErr || "Cargando el formato vigente…")}</div>`) +
+    (S.fmt ? "" : `<div class="${S.fmtErr ? "err" : "card muted"}">${esc(S.fmtErr || (S.fmts ? "No hay formatos vigentes. Apruebe uno en Control documentario." : "Cargando los formatos vigentes…"))}</div>`) +
     (b ? `<div class="in-card"><h3>Inspección sin terminar</h3><p class="s">${esc(b.area || "Sin área")} · iniciada ${esc(b.t0 || "")} · formato versión ${esc(b.fmt.version)}</p><div class="in-top"><button class="btn sm" data-in="seguir">Continuar</button><button class="btn sec sm" data-in="descartar">Descartar</button></div></div>` : "") +
     (S.err ? `<div class="err">${esc(S.err)}</div>` : "") +
     `<div class="in-card"><h3>Buscar inspecciones</h3>
-      <div class="in-q"><input class="in" id="in-q-txt" placeholder="Área, inspector o responsable" value="${esc(q.txt)}" autocomplete="off">
+      <div class="in-q"><input class="in" id="in-q-txt" placeholder="Área, inspector, responsable o código" value="${esc(q.txt)}" autocomplete="off">
         <select class="in" id="in-q-cal"><option value="">Toda calificación</option>${["Satisfactorio","Aceptable con acciones","No satisfactorio"].map(c => `<option ${q.cal === c ? "selected" : ""}>${c}</option>`).join("")}</select></div>
       <div class="in-q2"><label>Desde<input class="in" type="date" id="in-q-desde" value="${esc(q.desde)}"></label><label>Hasta<input class="in" type="date" id="in-q-hasta" value="${esc(q.hasta)}"></label></div></div>` +
     `<div id="in-lst">${htmlLista()}</div>`;
 }
+function pintaElegir(){
+  box().innerHTML = `<div class="in-top"><button class="btn sec sm" data-in="lista">← Historial</button></div>
+    <div class="in-card"><h3>Elija el formato</h3><p class="s">Formatos vigentes aprobados en Control documentario.</p></div>` +
+    S.fmts.map(f => `<button class="in-row" data-in-fmt="${esc(f.versionId)}"><div class="l1"><b>${esc(f.titulo)}</b><span class="hz-b cer">v${esc(f.version)}</span></div><div class="m" style="font-size:12.5px;color:var(--gray)">${esc(f.codigo)}</div></button>`).join("");
+}
 function pintaDetalle(){
   const i = (S.lista || []).find(x => x.id === S.sel); if(!i){ S.vista = "lista"; return pintaLista(); }
-  const f = i.versionId ? S.defs[i.versionId] : S.fmt;
+  const f = i.versionId ? S.defs[i.versionId] : ((S.fmts || []).filter(x => x.codigo === DOC)[0] || S.fmt);
   if(!f){ box().innerHTML = `<div class="card muted">Cargando…</div>`; fmtDe(i.versionId).then(() => { if(S.vista === "detalle" && S.sel === i.id) pintaDetalle(); }).catch(() => { box().innerHTML = `<div class="in-top"><button class="btn sec sm" data-in="lista">← Historial</button></div><div class="err">No se pudo cargar la versión del formato de esta inspección. Revise su señal.</div>`; }); return; }
   const crit = {}; (i.criterios || []).forEach(c => crit[c.n] = c);
   box().innerHTML = `<div class="in-top"><button class="btn sec sm" data-in="lista">← Historial</button></div>${S.fin ? `<div class="in-ok">✔ Inspección terminada y registrada</div>` : ""}<div class="in-top"><button class="btn" style="flex:1" data-in="descargar">Descargar PDF</button><button class="btn sec" style="flex:1" data-in="pdf">Compartir</button></div><div class="in-top"><button class="btn sec" style="flex:1" data-in="imprimir">Imprimir</button></div>` +
@@ -435,10 +444,13 @@ async function imprimirInsp(i, btn){
   btn.disabled = false; btn.textContent = t0;
 }
 
+function empieza(fmt){ S.F = nuevoForm(fmt); S.paso = 0; S.vista = "form"; S.err = ""; guardaBorrador(); pintaForm(); cargaAreas(); window.scrollTo(0, 0); }
+
 /* ---------- eventos ---------- */
 document.addEventListener("click", async ev => {
   if(!document.getElementById("v-insp") || document.getElementById("v-insp").classList.contains("hidden")) return;
   const t = ev.target, F = S.F;
+  const ef = t.closest("[data-in-fmt]"); if(ef){ const f = (S.fmts || []).filter(x => x.versionId === ef.dataset.inFmt)[0]; if(f) empieza(f); return; }
   const ver = t.closest("[data-in-ver]"); if(ver){ S.sel = ver.dataset.inVer; S.fin = false; S.vista = "detalle"; repinta(); return; }
   const cb = t.closest("[data-in-c]");
   if(cb && F){ leeCampos(); const [i, k] = cb.dataset.inC.split("|"); F.puntos[+i].c[k] = cb.dataset.v; guardaBorrador(); pintaForm(); return; }
@@ -448,7 +460,7 @@ document.addEventListener("click", async ev => {
   const fl = t.closest("[data-in-fl]"); if(fl && F){ if(fl.dataset.inFl === "insp") F.firmaInsp = ""; else F.firmaResp = ""; guardaBorrador(); pintaForm(); return; }
   const k = t.closest("[data-in]"); if(!k) return; const a = k.dataset.in;
   if(a === "pdf" || a === "descargar" || a === "imprimir"){ const i = (S.lista || []).find(x => x.id === S.sel); if(i){ if(a === "imprimir") imprimirInsp(i, k); else compartirInsp(i, k, a === "descargar"); } return; }
-  if(a === "nueva"){ if(!S.fmt) return; S.F = nuevoForm(S.fmt); S.paso = 0; S.vista = "form"; S.err = ""; guardaBorrador(); pintaForm(); cargaAreas(); }
+  if(a === "nueva"){ if(!S.fmt) return; if(S.fmts.length > 1){ S.vista = "elegir"; repinta(); window.scrollTo(0, 0); } else empieza(S.fmt); }
   else if(a === "seguir"){ const b = leeBorrador(); if(!b) return pintaLista(); S.F = b; S.paso = 0; S.vista = "form"; S.err = ""; pintaForm(); cargaAreas(); }
   else if(a === "descartar"){ if(confirm("¿Descartar la inspección sin terminar?")){ borraBorrador(); pintaLista(); } }
   else if(a === "lista"){ S.fin = false; S.vista = "lista"; repinta(); }

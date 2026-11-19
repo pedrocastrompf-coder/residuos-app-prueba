@@ -8,12 +8,17 @@
 const TIPOS_HZ = ["Segregación de residuos","Almacenamiento y acopio","Derrames y fugas","Efluentes y desagües","Orden y limpieza","Uso de agua y energía","Otro"];
 const COLORES = [["","Sin color"],["#1f1f1f","Negro"],["#8b5a2b","Marrón"],["#1f5fbf","Azul"],["#ffffff","Blanco"],["#2e8b3d","Verde"],["#f2c200","Amarillo"],["#d32f2f","Rojo"],["#8a8077","Gris"],["#e07b1f","Naranja"]];
 const ERR = {
-  accion:"El servidor todavía no tiene el módulo de Control documentario. Pegue Code.gs, ControlDoc.gs e Inspecciones.gs en el script y publique una nueva versión.", motivo_invalido:"Escriba el motivo del cambio (mínimo 5 letras).", estado_invalido:"Esta versión ya no es un borrador. Actualice la pantalla.",
+  accion:"El servidor todavía no tiene el módulo de Control documentario. Pegue Code.gs, ControlDoc.gs e Inspecciones.gs en el script y publique una nueva versión.", codigo_invalido:"El código debe tener de 3 a 30 caracteres: letras, números, punto o guion (por ejemplo SGA.R.G.010).", codigo_existe:"Ya existe un documento con ese código.",
+  titulo_invalido:"Escriba el título (3 a 80 caracteres).", tipo_invalido:"Elija el tipo de documento.", responsable_invalido:"Escriba el responsable (3 a 60 caracteres).",
+  pdf_requerido:"Adjunte el PDF del documento.",
+  motivo_invalido:"Escriba el motivo del cambio (mínimo 5 letras).", estado_invalido:"Esta versión ya no es un borrador. Actualice la pantalla.",
   no_existe:"El documento o la versión ya no existe. Actualice la pantalla.", permiso:"No tiene permiso para esta acción.", pdf_invalido:"El PDF no es válido o pesa demasiado.",
   planta_bloqueada:"Esta planta apunta a una hoja distinta de la copia de prueba. Revise la pestaña Plantas.",
   clave:"El servidor no reconoce esta acción. Falta pegar ControlDoc.gs (y Code.gs) y publicar una nueva versión del script."
 };
-const S = {vista:"lista", docs:null, err:"", sel:null, det:null, E:null, ocupado:false, verCambios:10};
+const S = {vista:"lista", docs:null, err:"", sel:null, det:null, E:null, ocupado:false, verCambios:10,
+  N:{codigo:"", titulo:"", tipo:"Formato", responsable:"Medio Ambiente"}, P:null};     // N = nuevo documento; P = subir PDF de una versión
+const MAX_PDF = 8 * 1024 * 1024;
 const EDK = "doc_edicion:";
 
 const st = document.createElement("style");
@@ -69,15 +74,18 @@ function drawDoc(){ if(!box()) return; repinta(); if(S.vista === "lista") cargaD
 function repinta(){
   if(!box() || TAB !== "doc") return;
   if(S.vista === "editor") return pintaEditor();
+  if(S.vista === "nuevo") return pintaNuevo();
+  if(S.vista === "subir") return pintaSubir();
   if(S.vista === "detalle") return pintaDetalle();
   pintaLista();
 }
 function pintaLista(){
   const L = S.docs;
   box().innerHTML = (S.err ? `<div class="err">${esc(S.err)}</div>` : "") +
+    (can("doc_editar") ? `<div class="in-top"><button class="btn" style="flex:1" data-dc="nuevo">＋ Nuevo documento</button></div>` : "") +
     `<div class="in-card"><h3>Lista maestra</h3><p class="s">Documentos controlados del sistema de gestión ambiental. Toque uno para ver sus versiones, editarlo o aprobarlo.</p></div>` +
     (L === null ? `<div class="card muted">Cargando…</div>` : !L.length ? `<div class="card muted">No hay documentos.</div>` : L.map(d =>
-      `<button class="dc-row" data-dc-ver="${esc(d.codigo)}"><div class="l1"><b>${esc(d.codigo)}</b><span class="dc-b vig">Versión ${esc(d.version)}</span></div>
+      `<button class="dc-row" data-dc-ver="${esc(d.codigo)}"><div class="l1"><b>${esc(d.codigo)}</b>${d.version ? `<span class="dc-b vig">Versión ${esc(d.version)}</span>` : `<span class="dc-b obs">Sin versión vigente</span>`}</div>
         <div>${esc(d.titulo)}</div><div class="m">${esc(d.tipo)} · ${d.fechaAprobacion ? "aprobada el " + fecha(d.fechaAprobacion) : "sin fecha de aprobación"}${d.borrador ? ` · <span class="dc-b bor">Borrador ${esc(d.borrador.version)} en curso</span>` : ""}</div></button>`).join(""));
 }
 const badge = e => `<span class="dc-b ${e === "Vigente" ? "vig" : e === "Borrador" ? "bor" : "obs"}">${esc(e)}</span>`;
@@ -85,21 +93,84 @@ function pintaDetalle(){
   const D = S.det;
   if(!D){ box().innerHTML = `<div class="in-top"><button class="btn sec sm" data-dc="lista">← Documentos</button></div>` + (S.err ? `<div class="err">${esc(S.err)}</div>` : `<div class="card muted">Cargando…</div>`); return; }
   const d = D.documento, br = D.versiones.filter(v => v.estado === "Borrador")[0], vig = D.versiones.filter(v => v.estado === "Vigente")[0];
-  const cam = D.cambios.slice(0, S.verCambios);
+  const cam = D.cambios.slice(0, S.verCambios), esF = d.tipo === "Formato";
   box().innerHTML = `<div class="in-top"><button class="btn sec sm" data-dc="lista">← Documentos</button></div>` +
     (S.err ? `<div class="err">${esc(S.err)}</div>` : "") +
     `<div class="in-card"><h3>${esc(d.codigo)} · ${esc(d.titulo)}</h3>
-      <div class="hz-kv"><span>Tipo</span><span>${esc(d.tipo)}</span><span>Versión vigente</span><span>${esc(d.version)}${d.fechaAprobacion ? " · aprobada el " + fecha(d.fechaAprobacion) : ""}</span><span>Responsable</span><span>${esc(d.responsable)}</span></div>
-      <div class="in-top"><button class="btn sec" style="flex:1" data-dc="pdf-vig" data-v="${esc(vig ? vig.versionId : "")}">PDF de la versión vigente</button></div></div>` +
+      <div class="hz-kv"><span>Tipo</span><span>${esc(d.tipo)}</span><span>Versión vigente</span><span>${vig ? esc(d.version) + (d.fechaAprobacion ? " · aprobada el " + fecha(d.fechaAprobacion) : "") : "Ninguna todavía"}</span><span>Responsable</span><span>${esc(d.responsable)}</span></div>
+      ${vig ? `<div class="in-top"><button class="btn sec" style="flex:1" data-dc="${esF ? "pdf-vig" : "ver-pdf"}" data-v="${esc(vig.versionId)}">PDF de la versión vigente</button></div>` : ""}</div>` +
     (br ? `<div class="in-card"><h3>Borrador · versión ${esc(br.version)}</h3><p class="s">Editado por ${esc(br.editorNombre)} el ${fh(br.actualizado)}.<br>Motivo: ${esc(br.motivo)}</p>
-      <div class="in-top">${can("doc_editar") ? `<button class="btn sec" style="flex:1" data-dc="editar" data-v="${esc(br.versionId)}">Editar</button>` : ""}<button class="btn sec" style="flex:1" data-dc="previa" data-v="${esc(br.versionId)}">Vista previa</button></div>
+      <div class="in-top">${can("doc_editar") ? `<button class="btn sec" style="flex:1" data-dc="${esF ? "editar" : "subir"}" data-v="${esc(br.versionId)}">${esF ? "Editar" : "Cambiar PDF o motivo"}</button>` : ""}<button class="btn sec" style="flex:1" data-dc="${esF ? "previa" : "ver-pdf"}" data-v="${esc(br.versionId)}">${esF ? "Vista previa" : "Ver PDF"}</button></div>
       <div class="in-top">${can("doc_aprobar") ? `<button class="btn" style="flex:2" data-dc="aprobar" data-v="${esc(br.versionId)}" ${S.ocupado ? "disabled" : ""}>${S.ocupado ? "Aprobando…" : "Aprobar versión " + esc(br.version)}</button>` : ""}${can("doc_editar") ? `<button class="btn sec" style="flex:1" data-dc="descartar" data-v="${esc(br.versionId)}">Descartar</button>` : ""}</div></div>`
-      : can("doc_editar") ? `<div class="in-top"><button class="btn" style="flex:1" data-dc="editar" data-v="">Editar formato (nueva versión)</button></div>` : "") +
+      : can("doc_editar") ? `<div class="in-top"><button class="btn" style="flex:1" data-dc="${esF ? "editar" : "subir"}" data-v="">${esF ? "Editar formato (nueva versión)" : vig ? "Nueva versión (subir PDF)" : "Subir el PDF de la primera versión"}</button></div>` : "") +
     `<div class="in-card"><h3>Versiones</h3>${D.versiones.map(v => `<div class="dc-li"><div class="l1" style="display:flex;justify-content:space-between;gap:8px"><b>Versión ${esc(v.version)}</b>${badge(v.estado)}</div>
-      <div class="m">${v.aprobado ? "Aprobada por " + esc(v.aprobadorNombre) + " el " + fecha(v.fechaAprobacion) : v.estado === "Borrador" ? "En edición por " + esc(v.editorNombre) : "Carga inicial"}${v.tienePdf ? " · PDF en Drive" : ""}</div>
+      <div class="m">${v.aprobado ? "Aprobada por " + esc(v.aprobadorNombre) + " el " + fecha(v.fechaAprobacion) : v.estado === "Borrador" ? "En edición por " + esc(v.editorNombre) : "Carga inicial"}${v.tienePdf ? ` · <a href="#" data-dc="ver-pdf" data-v="${esc(v.versionId)}">PDF en Drive</a>` : ""}</div>
       ${v.motivo ? `<div class="m">${esc(v.motivo)}</div>` : ""}</div>`).join("")}</div>` +
     `<div class="in-card"><h3>Control de cambios</h3>${cam.map(c => `<div class="dc-li"><b>${esc(c.accion)}</b> · versión ${esc(c.version)}<div class="m">${fh(c.fecha)} · ${esc(c.nombre)}</div>${c.motivo ? `<div class="m">Motivo: ${esc(c.motivo)}</div>` : ""}${c.detalle ? `<div class="m">${esc(c.detalle)}</div>` : ""}</div>`).join("")}
       ${D.cambios.length > S.verCambios ? `<button class="btn sec sm" data-dc="mas">Ver más</button>` : ""}</div>`;
+}
+
+/* ---------- nuevo documento ---------- */
+function pintaNuevo(){
+  const N = S.N;
+  box().innerHTML = `<div class="dc-ed"><div class="in-top"><button class="btn sec sm" data-dc="lista">← Documentos</button></div>
+    <div class="in-card"><h3>Nuevo documento</h3>
+      <label class="f">Tipo</label><div class="dc-op">${["Formato","Procedimiento","Instructivo"].map(t => `<label class="${N.tipo === t ? "on" : ""}"><input type="radio" name="dc-tipo" data-dc="tipo" data-t="${t}">${t}</label>`).join("")}</div>
+      <p class="s">${N.tipo === "Formato" ? "Un formato se arma en el editor y, al aprobarlo, se puede llenar en Inspecciones." : "Cada versión se sube como PDF (hecho en Word u otro programa)."}</p>
+      <label class="f">Código</label><input class="in" data-dc-n="codigo" maxlength="30" autocomplete="off" placeholder="Por ejemplo SGA.R.G.010" value="${esc(N.codigo)}">
+      <label class="f">Título</label><input class="in" data-dc-n="titulo" maxlength="80" autocomplete="off" value="${esc(N.titulo)}">
+      <label class="f">Responsable</label><input class="in" data-dc-n="responsable" maxlength="60" autocomplete="off" value="${esc(N.responsable)}"></div>
+    <div class="err" id="dc-err">${esc(S.err)}</div>
+    <div class="in-top"><button class="btn" style="flex:1" data-dc="crear" ${S.ocupado ? "disabled" : ""}>${S.ocupado ? "Creando…" : "Crear documento"}</button></div></div>`;
+}
+async function crear(){
+  if(S.ocupado) return;
+  const N = S.N, T = (x, a, b) => { x = String(x || "").trim(); return x.length >= a && x.length <= b; };
+  S.err = !/^[A-Za-z0-9][A-Za-z0-9._-]{2,29}$/.test(N.codigo.trim()) ? ERR.codigo_invalido : !T(N.titulo, 3, 80) ? ERR.titulo_invalido : !T(N.responsable, 3, 60) ? ERR.responsable_invalido : "";
+  if(S.err) return pintaNuevo();
+  S.ocupado = true; pintaNuevo();
+  try{
+    const j = await postJ({action:"doc_crear", codigo:N.codigo.trim(), titulo:N.titulo.trim(), tipo:N.tipo, responsable:N.responsable.trim()}, 60000);
+    S.ocupado = false;
+    if(!(j && j.ok)){ S.err = msg(j); return pintaNuevo(); }
+    toast("Documento " + j.codigo + " creado");
+    S.N = {codigo:"", titulo:"", tipo:"Formato", responsable:"Medio Ambiente"}; S.sel = j.codigo; S.vista = "detalle"; S.err = ""; window.scrollTo(0, 0);
+    await cargaDetalle(j.codigo);
+    if(j.versionId && S.det) abreEditor(j.versionId);       // un formato nuevo se abre directo en el editor
+    else if(S.det){ S.P = {motivo:"Primera versión.", pdf:null, nombre:""}; S.vista = "subir"; repinta(); }
+  }catch(e){ S.ocupado = false; S.err = "Sin señal. Intente de nuevo."; pintaNuevo(); }
+}
+
+/* ---------- subir el PDF de una versión (procedimientos e instructivos) ---------- */
+function pintaSubir(){
+  const D = S.det, P = S.P, br = D.versiones.filter(v => v.estado === "Borrador")[0];
+  box().innerHTML = `<div class="dc-ed"><div class="in-top"><button class="btn sec sm" data-dc="volver">← Cancelar</button></div>
+    <div class="in-card"><h3>${esc(D.documento.codigo)} · ${br ? "borrador versión " + esc(br.version) : "nueva versión"}</h3><p class="s">${esc(D.documento.titulo)}</p>
+      <label class="f">PDF del documento</label>
+      <label class="btn sec" style="display:block;text-align:center">${P.nombre ? "📄 " + esc(P.nombre) + " · cambiar" : br ? "Cambiar el PDF (opcional)" : "Elegir el PDF"}<input type="file" accept="application/pdf,.pdf" data-dc-pdf="1" hidden></label>
+      <p class="s">Máximo 8 MB.${br && !P.nombre ? " Si no elige otro, se mantiene el PDF ya subido." : ""}</p>
+      <label class="f">Motivo del cambio</label><textarea class="in" data-dc-m="1" maxlength="500" placeholder="¿Qué se cambia y por qué? (queda en el control de cambios)">${esc(P.motivo)}</textarea></div>
+    <div class="err" id="dc-err">${esc(S.err)}</div>
+    <div class="in-top"><button class="btn" style="flex:1" data-dc="subir-guardar" ${S.ocupado ? "disabled" : ""}>${S.ocupado ? "Guardando…" : "Guardar borrador"}</button></div></div>`;
+}
+async function subirGuardar(){
+  const D = S.det, P = S.P, br = D.versiones.filter(v => v.estado === "Borrador")[0]; if(S.ocupado) return;
+  S.err = !P.pdf && !br ? ERR.pdf_requerido : String(P.motivo || "").trim().length < 5 ? ERR.motivo_invalido : "";
+  if(S.err) return pintaSubir();
+  S.ocupado = true; pintaSubir();
+  try{
+    const j = await postJ(Object.assign({action:"doc_borrador_guardar", codigo:D.documento.codigo, motivo:P.motivo.trim()}, P.pdf ? {pdf:P.pdf} : {}), 180000);
+    S.ocupado = false;
+    if(!(j && j.ok)){ S.err = msg(j); return pintaSubir(); }
+    toast("Borrador " + j.version + " guardado"); S.P = null; S.vista = "detalle"; S.err = ""; window.scrollTo(0, 0); cargaDetalle(D.documento.codigo);
+  }catch(e){ S.ocupado = false; S.err = "Sin señal o el PDF es muy pesado para su conexión. Intente de nuevo."; pintaSubir(); }
+}
+async function verPdf(versionId, btn){
+  await conBoton(btn, "Abriendo…", async () => {
+    const j = await postJ({action:"doc_pdf", versionId:versionId}, 90000);
+    if(!(j && j.ok)) throw new Error("No se encontró el PDF de esta versión.");
+    const b = await (await fetch(j.dataUrl)).blob(); muestra(new File([b], j.nombre, {type:"application/pdf"}));
+  });
 }
 
 /* ---------- editor de formato ---------- */
@@ -111,6 +182,11 @@ async function abreEditor(versionId){
   const D = S.det, d = D.documento, local = leeLocal(d.codigo), br = D.versiones.filter(v => v.estado === "Borrador")[0];
   if(local && confirm("Hay cambios sin guardar de una edición anterior en este equipo. ¿Recuperarlos?")){ S.E = local; S.vista = "editor"; S.err = ""; return repinta(); }
   borraLocal(d.codigo);
+  if(!versionId && !d.versionId){                           // formato sin versión vigente ni borrador: se parte de la plantilla mínima
+    S.E = {codigo:d.codigo, borrador:null, motivo:"Primera versión.", def:{titulo:d.titulo, puntos:null, criterios:{grupos:[{nombre:"Criterios de verificación", items:[{t:"Escriba aquí el primer criterio", h:"Otro", auto:""}]}]},
+      resultado:{modo:"porcentaje", cortes:{sat:90, ace:70}}, firmas:{insp:"Responsable de la inspección", resp:"Responsable del área inspeccionada"}}};
+    S.vista = "editor"; S.err = ""; window.scrollTo(0, 0); return repinta();
+  }
   try{
     const v = await version(versionId || d.versionId);      // el borrador, o la vigente como punto de partida
     S.E = {codigo:d.codigo, borrador:br ? br.version : null, def:copia(v.definicion), motivo:versionId ? v.motivo || "" : ""};
@@ -260,6 +336,13 @@ document.addEventListener("click", async ev => {
   const k = t.closest("[data-dc]"); if(!k) return;
   const a = k.dataset.dc, i = +k.dataset.i, g = +k.dataset.g, E = S.E;
   if(a === "lista"){ S.vista = "lista"; S.det = null; S.err = ""; repinta(); return cargaDocs(); }
+  if(a === "nuevo"){ S.vista = "nuevo"; S.err = ""; window.scrollTo(0, 0); return repinta(); }
+  if(a === "tipo"){ S.N.tipo = k.dataset.t; return pintaNuevo(); }
+  if(a === "crear") return crear();
+  if(a === "subir"){ S.P = {motivo:"", pdf:null, nombre:""}; const br = S.det.versiones.filter(v => v.estado === "Borrador")[0]; if(br) S.P.motivo = br.motivo; S.vista = "subir"; S.err = ""; window.scrollTo(0, 0); return repinta(); }
+  if(a === "volver"){ S.P = null; S.vista = "detalle"; S.err = ""; return repinta(); }
+  if(a === "subir-guardar") return subirGuardar();
+  if(a === "ver-pdf"){ ev.preventDefault(); return verPdf(k.dataset.v, k); }
   if(a === "mas"){ S.verCambios += 20; return pintaDetalle(); }
   if(a === "editar") return abreEditor(k.dataset.v);
   if(a === "previa") return conBoton(k, "Preparando…", async () => { const v = await version(k.dataset.v); muestra(await pdfBlanco(fmtDe(S.det, v, v.definicion))); });
@@ -297,9 +380,24 @@ document.addEventListener("click", async ev => {
   else return;
   S.err = ""; guardaLocal(); pintaEditor();
 });
-document.addEventListener("input", ev => { if(TAB === "doc" && S.E && ev.target.dataset && ev.target.dataset.dcF) campo(ev.target.dataset.dcF, ev.target.value); });
-document.addEventListener("change", ev => {
-  if(TAB !== "doc" || !S.E || !ev.target.dataset) return;
+document.addEventListener("input", ev => {
+  if(TAB !== "doc" || !ev.target.dataset) return;
+  const t = ev.target;
+  if(S.E && t.dataset.dcF) return campo(t.dataset.dcF, t.value);
+  if(t.dataset.dcN === "codigo"){ const p = t.selectionStart; t.value = t.value.toUpperCase(); t.setSelectionRange(p, p); }
+  if(t.dataset.dcN) S.N[t.dataset.dcN] = t.value;
+  if(t.dataset.dcM && S.P) S.P.motivo = t.value;
+});
+document.addEventListener("change", async ev => {
+  if(TAB !== "doc" || !ev.target.dataset) return;
+  if(ev.target.dataset.dcPdf && S.P){                         // PDF elegido para la versión
+    const f = ev.target.files && ev.target.files[0]; if(!f) return;
+    if(f.type && f.type !== "application/pdf"){ S.err = "El archivo debe ser PDF."; return pintaSubir(); }
+    if(f.size > MAX_PDF){ S.err = "El PDF pesa " + (f.size / 1048576).toFixed(1) + " MB; el máximo es 8 MB."; return pintaSubir(); }
+    S.P.pdf = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(f); });
+    S.P.nombre = f.name; S.err = ""; return pintaSubir();
+  }
+  if(!S.E) return;
   if(ev.target.dataset.dcF) return campo(ev.target.dataset.dcF, ev.target.value);
   if(ev.target.dataset.dcAuto){                             // criterio calculado con la tabla de puntos (uno o ninguno)
     const v = ev.target.value, G = S.E.def.criterios.grupos; G.forEach(x => x.items.forEach(it => it.auto = ""));
