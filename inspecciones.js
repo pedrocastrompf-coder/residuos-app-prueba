@@ -349,6 +349,7 @@ const CSS_PDF = `<style>
 .fi .fm{height:60px;text-align:center}.fi .fm img{max-height:56px;max-width:100%}
 .fi .sw{display:inline-block;width:8px;height:8px;border:1px solid #777;margin-right:3px;vertical-align:middle}
 .fi .tx{white-space:pre-wrap;min-height:40px}
+.fi .fi-lg{padding:3px}.fi .fi-lg img{max-height:62px;max-width:104px;display:block;margin:auto}
 </style>`;
 const celda = (v, cls) => `<td class="c ${cls || ""}${v === "NC" ? " nc" : ""}">${esc(v || "")}</td>`;
 // i = inspección (o vacía para el formato en blanco), f = firmas, fmt = versión del formato
@@ -356,7 +357,7 @@ function htmlFormato(i, f, fmt){
   const def = fmt.def, crit = {}; (i.criterios || []).forEach(c => crit[c.n] = c);
   let L = 0; const sec = (t, extra) => `<div class="s">${LET[L++]}. ${esc(t.toUpperCase())}${extra ? ` <span style="font-weight:normal">${extra}</span>` : ""}</div>`;
   let h = CSS_PDF + `<div class="fi">
-  <table><tr><td rowspan="3" style="width:90px" class="c"><b>${esc(CFG.PLANTA || "")}</b></td><td rowspan="3" class="t">${esc(def.titulo.toUpperCase())}</td><td>Código: <b>${esc(fmt.codigo)}</b></td></tr>
+  <table><tr><td rowspan="3" style="width:110px" class="c fi-lg"><img src="img/logo.png" alt=""></td><td rowspan="3" class="t">${esc(def.titulo.toUpperCase())}</td><td>Código: <b>${esc(fmt.codigo)}</b></td></tr>
   <tr><td>Versión: <b>${esc(fmt.version)}</b></td></tr><tr><td>Fecha de aprobación: ${esc(fecha(fmt.fechaAprobacion))}</td></tr></table>
   ${sec("Datos generales")}
   <table><tr><td><b>PLANTA:</b> ${esc(CFG.PLANTA || "")}</td><td><b>FECHA:</b> ${esc(fecha(i.fecha))}</td></tr><tr><td><b>ÁREA INSPECCIONADA:</b> ${esc(i.area || "")}</td><td><b>HORA:</b> ${esc(i.hora || "")}</td></tr></table>`;
