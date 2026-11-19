@@ -29,7 +29,8 @@ st.textContent = `
 .dc-row{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0;font:inherit;color:inherit;box-sizing:border-box}
 .dc-cab{display:block;width:100%;text-align:left;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer}
 .dc-acc{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
-.dc-acc .dc-del{margin-left:auto;color:var(--red);border-color:#f0c9c4}
+.dc-acc .dc-del{margin-left:auto}
+.dc-del{color:var(--red)!important;border-color:#f0c9c4!important}
 .dc-row .l1{display:flex;justify-content:space-between;align-items:center;gap:8px}.dc-row .m{font-size:12.5px;color:var(--gray);margin-top:3px}
 .dc-b{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;background:#f1ebe4;color:var(--brown)}
 .dc-b.vig{background:#e8f3ea;color:var(--ok)}.dc-b.bor{background:#fff3e0;color:#b25e00}.dc-b.obs{background:#eee;color:#777}
@@ -121,11 +122,12 @@ function pintaDetalle(){
       <div class="in-top">${can("doc_editar") ? `<button class="btn sec" style="flex:1" data-dc="${esF ? "editar" : "subir"}" data-v="${esc(br.versionId)}">${esF ? "Editar" : "Cambiar PDF o motivo"}</button>` : ""}<button class="btn sec" style="flex:1" data-dc="${esF ? "previa" : "ver-pdf"}" data-v="${esc(br.versionId)}">${esF ? "Vista previa" : "Ver PDF"}</button></div>
       <div class="in-top">${can("doc_aprobar") ? `<button class="btn" style="flex:2" data-dc="aprobar" data-v="${esc(br.versionId)}" ${S.ocupado ? "disabled" : ""}>${S.ocupado ? "Aprobando…" : "Aprobar versión " + esc(br.version)}</button>` : ""}${can("doc_editar") ? `<button class="btn sec" style="flex:1" data-dc="descartar" data-v="${esc(br.versionId)}">Descartar</button>` : ""}</div></div>`
       : can("doc_editar") ? `<div class="in-top"><button class="btn" style="flex:1" data-dc="${esF ? "editar" : "subir"}" data-v="">${esF ? "Editar formato (nueva versión)" : vig ? "Nueva versión (subir PDF)" : "Subir el PDF de la primera versión"}</button></div>` : "") +
-    `<div class="in-card"><h3>Versiones</h3>${D.versiones.map(v => `<div class="dc-li"><div class="l1" style="display:flex;justify-content:space-between;gap:8px"><b>Versión ${esc(v.version)}</b>${badge(v.estado)}</div>
+    `<div class="in-card"><h3>Versiones</h3>${D.versiones.length ? "" : `<p class="s">Todavía no tiene versiones.</p>`}${D.versiones.map(v => `<div class="dc-li"><div class="l1" style="display:flex;justify-content:space-between;gap:8px"><b>Versión ${esc(v.version)}</b>${badge(v.estado)}</div>
       <div class="m">${v.aprobado ? "Aprobada por " + esc(v.aprobadorNombre) + " el " + fecha(v.fechaAprobacion) : v.estado === "Borrador" ? "En edición por " + esc(v.editorNombre) : "Carga inicial"}${v.tienePdf ? ` · <a href="#" data-dc="ver-pdf" data-v="${esc(v.versionId)}">PDF en Drive</a>` : ""}</div>
       ${v.motivo ? `<div class="m">${esc(v.motivo)}</div>` : ""}</div>`).join("")}</div>` +
-    `<div class="in-card"><h3>Control de cambios</h3>${cam.map(c => `<div class="dc-li"><b>${esc(c.accion)}</b> · versión ${esc(c.version)}<div class="m">${fh(c.fecha)} · ${esc(c.nombre)}</div>${c.motivo ? `<div class="m">Motivo: ${esc(c.motivo)}</div>` : ""}${c.detalle ? `<div class="m">${esc(c.detalle)}</div>` : ""}</div>`).join("")}
-      ${D.cambios.length > S.verCambios ? `<button class="btn sec sm" data-dc="mas">Ver más</button>` : ""}</div>`;
+    `<div class="in-card"><h3>Control de cambios</h3>${cam.map(c => `<div class="dc-li"><b>${esc(c.accion)}</b>${c.version ? " · versión " + esc(c.version) : ""}<div class="m">${fh(c.fecha)} · ${esc(c.nombre)}</div>${c.motivo ? `<div class="m">Motivo: ${esc(c.motivo)}</div>` : ""}${c.detalle ? `<div class="m">${esc(c.detalle)}</div>` : ""}</div>`).join("")}
+      ${D.cambios.length > S.verCambios ? `<button class="btn sec sm" data-dc="mas">Ver más</button>` : ""}</div>` +
+    (can("doc_aprobar") ? `<div class="in-top" style="margin-top:14px"><button class="btn sec dc-del" style="flex:1" data-dc="eliminar" data-c="${esc(d.codigo)}">Eliminar documento</button></div>` : "");
 }
 
 /* ---------- desde la lista: ver una versión y eliminar ---------- */
@@ -138,7 +140,7 @@ async function verDeLista(codigo, versionId, btn){
   });
 }
 async function eliminar(codigo){
-  const d = (S.docs || []).filter(x => x.codigo === codigo)[0]; if(!d) return;
+  const d = (S.docs || []).filter(x => x.codigo === codigo)[0] || (S.det && S.det.documento.codigo === codigo ? S.det.documento : null); if(!d) return;
   const motivo = prompt("Eliminar " + codigo + " · " + d.titulo + "\n\nYa no aparecerá en la lista ni se podrá llenar. Los registros ya llenados con este documento se conservan y se pueden reimprimir.\n\nEscriba el motivo (queda en el control de cambios):");
   if(motivo === null) return;
   if(motivo.trim().length < 5) return toast("Escriba un motivo de al menos 5 letras.");
@@ -147,6 +149,7 @@ async function eliminar(codigo){
     if(!(j && j.ok)){ S.err = msg(j); return pintaLista(); }
     try{ localStorage.removeItem(EDK + codigo); }catch(e){}
     toast(codigo + " eliminado" + (j.registros ? " · sus " + j.registros + " registro(s) se conservan" : ""));
+    S.vista = "lista"; S.det = null; S.err = ""; repinta(); window.scrollTo(0, 0);
   }catch(e){ S.err = "Sin señal. El documento no se eliminó: intente de nuevo."; }
   cargaDocs();
 }
