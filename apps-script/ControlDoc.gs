@@ -10,7 +10,7 @@
  */
 
 // ===================== 1. REGLAS =====================
-const DOC_COLS = ["codigo","titulo","tipo","version","versionId","fechaAprobacion","responsable","creado"];
+const DOC_COLS = ["codigo","titulo","tipo","version","versionId","fechaAprobacion","responsable","creado","eliminado"];
 const VER_COLS = ["versionId","codigo","version","estado","definicion","editor","editorNombre","creado","actualizado","aprobador","aprobadorNombre","aprobado","fechaAprobacion","motivo","pdf"];
 const CC_COLS  = ["fecha","codigo","version","accion","usuario","nombre","motivo","detalle"];
 const DOC_TIPOS = ["Formato","Procedimiento","Instructivo"];
@@ -218,7 +218,7 @@ function docSembrarAhora_(sh){
   const sis = {usuario:"sistema", nombre:"Carga inicial"}, ahora = hzAhora_();
   const v06 = docValidarDef_(DOC_DEF_06).def, v07 = docValidarDef_(DOC_DEF_07).def;
   const id06 = "v-" + Utilities.getUuid().slice(0, 8), id07 = "v-" + Utilities.getUuid().slice(0, 8);
-  sh.appendRow([DOC_INSPECCION, "Inspección ambiental de área de trabajo", "Formato", "06", id06, "", "Medio Ambiente", ahora]);
+  sh.appendRow([DOC_INSPECCION, "Inspección ambiental de área de trabajo", "Formato", "06", id06, "", "Medio Ambiente", ahora, ""]);
   verHoja_().appendRow([id06, DOC_INSPECCION, "06", "Vigente", JSON.stringify(v06), sis.usuario, sis.nombre, ahora, ahora, "", "", "", "", "Formato vigente en papel (carga inicial).", ""]);
   verHoja_().appendRow([id07, DOC_INSPECCION, "07", "Borrador", JSON.stringify(v07), sis.usuario, sis.nombre, ahora, ahora, "", "", "", "",
     "Se reduce a 9 criterios (se retiran efluentes, toma de conciencia y «Otro», y se unifican criterios redundantes). Se elimina la sección F (custodia del registro) porque no se firma desde la app.", ""]);
@@ -229,7 +229,7 @@ function docSembrarAhora_(sh){
 function docVersionPorId_(id){ return docFilas_(verHoja_(), VER_COLS).filter(v => v.versionId === String(id))[0] || null; }
 // definición de una versión (para inspecciones); null si no existe o es un borrador
 function docDefAprobada_(id){
-  const v = docVersionPorId_(id); if (!v || v.estado === "Borrador") return null;
+  const v = docVersionPorId_(id); if (!v || (v.estado !== "Vigente" && v.estado !== "Obsoleta")) return null;   // nunca un borrador ni uno descartado
   try{ return {def:JSON.parse(v.definicion), version:v.version, codigo:v.codigo, versionId:v.versionId}; }catch(e){ return null; }
 }
 function docVigenteDe_(codigo){
@@ -242,7 +242,7 @@ function docVigenteDe_(codigo){
 function docListar_(u){
   docSembrar_();
   const V = docFilas_(verHoja_(), VER_COLS);
-  return {ok:true, documentos:docFilas_(docHoja_(), DOC_COLS).map(d => {
+  return {ok:true, documentos:docFilas_(docHoja_(), DOC_COLS).filter(d => !d.eliminado).map(d => {
     const b = V.filter(v => v.codigo === d.codigo && v.estado === "Borrador")[0];
     return {codigo:d.codigo, titulo:d.titulo, tipo:d.tipo, version:d.version, versionId:d.versionId, fechaAprobacion:d.fechaAprobacion, responsable:d.responsable,
       borrador:b ? {versionId:b.versionId, version:b.version} : null};
@@ -269,7 +269,7 @@ function docVersion_(b, u){
 function docFormatosVigentes_(u){
   docSembrar_();
   const V = docFilas_(verHoja_(), VER_COLS);
-  const L = docFilas_(docHoja_(), DOC_COLS).filter(d => docEsFormato_(d.tipo) && d.versionId).map(d => {
+  const L = docFilas_(docHoja_(), DOC_COLS).filter(d => !d.eliminado && docEsFormato_(d.tipo) && d.versionId).map(d => {
     const v = V.filter(x => x.versionId === d.versionId)[0]; if (!v) return null;
     let def = null; try{ def = JSON.parse(v.definicion); }catch(e){}
     return def && def.criterios ? {codigo:d.codigo, titulo:d.titulo, version:v.version, versionId:v.versionId, fechaAprobacion:v.fechaAprobacion, definicion:def} : null;
@@ -288,9 +288,9 @@ function docCrear_(b, u){
   // si el formato viene de un archivo con versión (p. ej. 05 en papel), la primera versión en la app continúa la numeración (06)
   const base = parseInt(b.versionBase, 10), primera = base >= 1 && base <= 98 ? ("0" + (base + 1)).slice(-2) : "01";
   {
-    if (docFilas_(docHoja_(), DOC_COLS).some(d => d.codigo.toUpperCase() === codigo)) return {ok:false, error:"codigo_existe"};
+    if (docFilas_(docHoja_(), DOC_COLS).some(d => !d.eliminado && d.codigo.toUpperCase() === codigo)) return {ok:false, error:"codigo_existe"};
     const ahora = hzAhora_();
-    docHoja_().appendRow([codigo, titulo, tipo, "", "", "", resp, ahora]);
+    docHoja_().appendRow([codigo, titulo, tipo, "", "", "", resp, ahora, ""]);
     docCambio_(codigo, "", "Documento creado", u, "", tipo + " · " + titulo + " · responsable: " + resp);
     let versionId = "";
     if (docEsFormato_(tipo)){
@@ -398,6 +398,33 @@ function docPdfGuardar_(b, u){
   docPodar_(v.codigo);
   docCambio_(v.codigo, v.version, "PDF guardado en Drive", u, "", DOC_RAIZ + "/" + v.codigo);
   return {ok:true};
+}
+
+// Elimina un documento de la lista maestra y de los formatos para llenar. Sus versiones se conservan (renombradas)
+// para que los registros ya llenados se sigan viendo y reimprimiendo; el código queda libre. Los PDF de Drive van a la papelera.
+function docEliminar_(b, u){
+  u = hzU_(u);
+  const codigo = String(b.codigo || ""), motivo = hzTxt_(b.motivo);
+  if (motivo.length < 5 || motivo.length > 500) return {ok:false, error:"motivo_invalido"};
+  const dsh = docHoja_(), d = docFilas_(dsh, DOC_COLS).filter(x => x.codigo === codigo && !x.eliminado)[0];
+  if (!d) return {ok:false, error:"no_existe"};
+  const vsh = verHoja_(), V = docFilas_(vsh, VER_COLS).filter(v => v.codigo === codigo), ids = V.map(v => v.versionId);
+  // registros ya llenados con alguna versión del documento (solo para informar)
+  let registros = 0;
+  try{
+    const ish = inspHoja_(), n = ish.getLastRow(), jV = INSP_COLS.indexOf("versionId");
+    if (n >= 2) ish.getRange(2, jV + 1, n - 1, 1).getValues().forEach(r => { if (ids.indexOf(String(r[0])) >= 0) registros++; });
+  }catch(e){}
+  const marca = codigo + "#eliminado-" + Utilities.formatDate(new Date(), "America/Lima", "yyyyMMddHHmmss"), ahora = hzAhora_();
+  V.forEach(v => {
+    if (v.pdf){ try{ DriveApp.getFileById(v.pdf).setTrashed(true); }catch(e){} v.pdf = ""; }
+    if (v.estado === "Borrador") v.estado = "Descartada";
+    v.codigo = marca; docEscribir_(vsh, VER_COLS, v);
+  });
+  d.codigo = marca; d.eliminado = ahora; docEscribir_(dsh, DOC_COLS, d);
+  docCambio_(codigo, d.version, "Documento eliminado", u, motivo, (V.length ? V.length + " versión(es) conservadas para el historial" : "Sin versiones") + (registros ? " · " + registros + " registro(s) llenados se siguen pudiendo ver y reimprimir" : ""));
+  bitacora_(u, "Documento eliminado", codigo + " · " + motivo);
+  return {ok:true, registros:registros};
 }
 
 // En Drive se conservan solo el PDF de la vigente y el de la anterior (la obsoleta aprobada más reciente); las demás versiones conservan sus datos

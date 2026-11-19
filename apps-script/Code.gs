@@ -1043,6 +1043,7 @@ function doPost(e){
     if (A === "doc_borrador_descartar") return puede_(u.rol,"doc_editar") ? json_(docBorradorDescartar_(b, u)) : no;
     if (A === "doc_aprobar") return puede_(u.rol,"doc_aprobar") ? json_(docAprobar_(b, u)) : no;
     if (A === "doc_pdf_guardar") return puede_(u.rol,"doc_aprobar") ? json_(docPdfGuardar_(b, u)) : no;
+    if (A === "doc_eliminar") return puede_(u.rol,"doc_aprobar") ? json_(docEliminar_(b, u)) : no;
     if (A === "hallazgo_foto") return json_(hzFoto_(b, u));
     if (A === "areas_listar") return json_(hzAreasListar_(u));
     if (A === "area_guardar") return puede_(u.rol,"areas_admin") ? json_(hzAreaGuardar_(b, u)) : no;

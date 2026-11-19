@@ -26,7 +26,10 @@ const EDK = "doc_edicion:";
 
 const st = document.createElement("style");
 st.textContent = `
-.dc-row{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0;font:inherit;color:inherit}
+.dc-row{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0;font:inherit;color:inherit;box-sizing:border-box}
+.dc-cab{display:block;width:100%;text-align:left;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer}
+.dc-acc{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.dc-acc .dc-del{margin-left:auto;color:var(--red);border-color:#f0c9c4}
 .dc-row .l1{display:flex;justify-content:space-between;align-items:center;gap:8px}.dc-row .m{font-size:12.5px;color:var(--gray);margin-top:3px}
 .dc-b{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;background:#f1ebe4;color:var(--brown)}
 .dc-b.vig{background:#e8f3ea;color:var(--ok)}.dc-b.bor{background:#fff3e0;color:#b25e00}.dc-b.obs{background:#eee;color:#777}
@@ -99,8 +102,9 @@ function pintaLista(){
     (can("doc_editar") ? `<div class="in-top"><button class="btn" style="flex:1" data-dc="nuevo">＋ Nuevo documento</button></div>` : "") +
     `<div class="in-card"><h3>Lista maestra</h3><p class="s">Documentos controlados del sistema de gestión ambiental. Toque uno para ver sus versiones, editarlo o aprobarlo.</p></div>` +
     (L === null ? `<div class="card muted">Cargando…</div>` : !L.length ? `<div class="card muted">No hay documentos.</div>` : L.map(d =>
-      `<button class="dc-row" data-dc-ver="${esc(d.codigo)}"><div class="l1"><b>${esc(d.codigo)}</b>${d.version ? `<span class="dc-b vig">Versión ${esc(d.version)}</span>` : `<span class="dc-b obs">Sin versión vigente</span>`}</div>
-        <div>${esc(d.titulo)}</div><div class="m">${esc(d.tipo)} · ${d.fechaAprobacion ? "aprobada el " + fecha(d.fechaAprobacion) : "sin fecha de aprobación"}${d.borrador ? ` · <span class="dc-b bor">Borrador ${esc(d.borrador.version)} en curso</span>` : ""}</div></button>`).join(""));
+      `<div class="dc-row"><button type="button" class="dc-cab" data-dc-ver="${esc(d.codigo)}"><div class="l1"><b>${esc(d.codigo)}</b>${d.version ? `<span class="dc-b vig">Vigente: versión ${esc(d.version)}</span>` : `<span class="dc-b obs">Sin versión vigente</span>`}</div>
+        <div>${esc(d.titulo)}</div><div class="m">${esc(d.tipo)}${d.version ? " · " + (d.fechaAprobacion ? "aprobada el " + fecha(d.fechaAprobacion) : "sin fecha de aprobación") : ""}${d.borrador ? ` · <span class="dc-b bor">En revisión: versión ${esc(d.borrador.version)}</span>` : ""}</div></button>
+        <div class="dc-acc">${d.versionId ? `<button type="button" class="btn sec sm" data-dc="lista-ver" data-c="${esc(d.codigo)}" data-v="${esc(d.versionId)}">Ver vigente</button>` : ""}${d.borrador ? `<button type="button" class="btn sec sm" data-dc="lista-ver" data-c="${esc(d.codigo)}" data-v="${esc(d.borrador.versionId)}">Ver en revisión</button>` : ""}${can("doc_aprobar") ? `<button type="button" class="btn sec sm dc-del" data-dc="eliminar" data-c="${esc(d.codigo)}">Eliminar</button>` : ""}</div></div>`).join(""));
 }
 const badge = e => `<span class="dc-b ${e === "Vigente" ? "vig" : e === "Borrador" ? "bor" : "obs"}">${esc(e)}</span>`;
 function pintaDetalle(){
@@ -113,7 +117,7 @@ function pintaDetalle(){
     `<div class="in-card"><h3>${esc(d.codigo)} · ${esc(d.titulo)}</h3>
       <div class="hz-kv"><span>Tipo</span><span>${esc(d.tipo)}</span><span>Versión vigente</span><span>${vig ? esc(d.version) + (d.fechaAprobacion ? " · aprobada el " + fecha(d.fechaAprobacion) : "") : "Ninguna todavía"}</span><span>Responsable</span><span>${esc(d.responsable)}</span></div>
       ${vig ? `<div class="in-top"><button class="btn sec" style="flex:1" data-dc="${esF ? "pdf-vig" : "ver-pdf"}" data-v="${esc(vig.versionId)}">PDF de la versión vigente</button></div>` : ""}</div>` +
-    (br ? `<div class="in-card"><h3>Borrador · versión ${esc(br.version)}</h3><p class="s">Editado por ${esc(br.editorNombre)} el ${fh(br.actualizado)}.<br>Motivo: ${esc(br.motivo)}</p>
+    (br ? `<div class="in-card"><h3>En revisión · versión ${esc(br.version)}</h3><p class="s">Editado por ${esc(br.editorNombre)} el ${fh(br.actualizado)}.<br>Motivo: ${esc(br.motivo)}</p>
       <div class="in-top">${can("doc_editar") ? `<button class="btn sec" style="flex:1" data-dc="${esF ? "editar" : "subir"}" data-v="${esc(br.versionId)}">${esF ? "Editar" : "Cambiar PDF o motivo"}</button>` : ""}<button class="btn sec" style="flex:1" data-dc="${esF ? "previa" : "ver-pdf"}" data-v="${esc(br.versionId)}">${esF ? "Vista previa" : "Ver PDF"}</button></div>
       <div class="in-top">${can("doc_aprobar") ? `<button class="btn" style="flex:2" data-dc="aprobar" data-v="${esc(br.versionId)}" ${S.ocupado ? "disabled" : ""}>${S.ocupado ? "Aprobando…" : "Aprobar versión " + esc(br.version)}</button>` : ""}${can("doc_editar") ? `<button class="btn sec" style="flex:1" data-dc="descartar" data-v="${esc(br.versionId)}">Descartar</button>` : ""}</div></div>`
       : can("doc_editar") ? `<div class="in-top"><button class="btn" style="flex:1" data-dc="${esF ? "editar" : "subir"}" data-v="">${esF ? "Editar formato (nueva versión)" : vig ? "Nueva versión (subir PDF)" : "Subir el PDF de la primera versión"}</button></div>` : "") +
@@ -122,6 +126,29 @@ function pintaDetalle(){
       ${v.motivo ? `<div class="m">${esc(v.motivo)}</div>` : ""}</div>`).join("")}</div>` +
     `<div class="in-card"><h3>Control de cambios</h3>${cam.map(c => `<div class="dc-li"><b>${esc(c.accion)}</b> · versión ${esc(c.version)}<div class="m">${fh(c.fecha)} · ${esc(c.nombre)}</div>${c.motivo ? `<div class="m">Motivo: ${esc(c.motivo)}</div>` : ""}${c.detalle ? `<div class="m">${esc(c.detalle)}</div>` : ""}</div>`).join("")}
       ${D.cambios.length > S.verCambios ? `<button class="btn sec sm" data-dc="mas">Ver más</button>` : ""}</div>`;
+}
+
+/* ---------- desde la lista: ver una versión y eliminar ---------- */
+async function verDeLista(codigo, versionId, btn){
+  const d = (S.docs || []).filter(x => x.codigo === codigo)[0]; if(!d) return;
+  if(d.tipo !== "Formato") return verPdf(versionId, btn);   // procedimientos e instructivos: su PDF subido
+  await conBoton(btn, "Preparando…", async () => {
+    const v = await version(versionId);
+    muestra(await pdfBlanco({codigo:codigo, version:v.estado === "Borrador" ? v.version + " (borrador)" : v.version, fechaAprobacion:v.fechaAprobacion || "", def:v.definicion}));
+  });
+}
+async function eliminar(codigo){
+  const d = (S.docs || []).filter(x => x.codigo === codigo)[0]; if(!d) return;
+  const motivo = prompt("Eliminar " + codigo + " · " + d.titulo + "\n\nYa no aparecerá en la lista ni se podrá llenar. Los registros ya llenados con este documento se conservan y se pueden reimprimir.\n\nEscriba el motivo (queda en el control de cambios):");
+  if(motivo === null) return;
+  if(motivo.trim().length < 5) return toast("Escriba un motivo de al menos 5 letras.");
+  try{
+    const j = await postJ({action:"doc_eliminar", codigo:codigo, motivo:motivo.trim()}, 60000);
+    if(!(j && j.ok)){ S.err = msg(j); return pintaLista(); }
+    try{ localStorage.removeItem(EDK + codigo); }catch(e){}
+    toast(codigo + " eliminado" + (j.registros ? " · sus " + j.registros + " registro(s) se conservan" : ""));
+  }catch(e){ S.err = "Sin señal. El documento no se eliminó: intente de nuevo."; }
+  cargaDocs();
 }
 
 /* ---------- nuevo documento ---------- */
@@ -401,6 +428,8 @@ document.addEventListener("click", async ev => {
   const k = t.closest("[data-dc]"); if(!k) return;
   const a = k.dataset.dc, i = +k.dataset.i, g = +k.dataset.g, E = S.E;
   if(a === "lista"){ S.vista = "lista"; S.det = null; S.err = ""; repinta(); return cargaDocs(); }
+  if(a === "lista-ver") return verDeLista(k.dataset.c, k.dataset.v, k);
+  if(a === "eliminar") return eliminar(k.dataset.c);
   if(a === "nuevo"){ S.vista = "nuevo"; S.err = ""; window.scrollTo(0, 0); return repinta(); }
   if(a === "tipo"){ S.N.tipo = k.dataset.t; return pintaNuevo(); }
   if(a === "crear") return crear();
