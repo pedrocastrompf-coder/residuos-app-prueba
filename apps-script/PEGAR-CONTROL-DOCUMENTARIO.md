@@ -32,3 +32,10 @@ Se pegan los mismos tres archivos (Code.gs, ControlDoc.gs, Inspecciones.gs) y se
 - **Procedimiento / Instructivo**: cada versión se sube como PDF (máximo 8 MB), con motivo; al aprobar queda vigente. En Drive quedan solo la vigente y la anterior.
 - La pestaña Inspecciones suma una columna «codigo» al final (las filas antiguas se toman como SGA.R.G.002).
 - Si solo se actualiza la app, la app avisa que falta el script y no deja empezar inspecciones; no se pierde nada.
+
+## Paso 2 (datos generales configurables y tabla de registro)
+Pegar completos `ControlDoc.gs` e `Inspecciones.gs` (Code.gs no cambia) y publicar una Nueva versión.
+- Un formato puede tener **campos propios** (texto, número, fecha, hora, lista, Área), una **tabla de registro** (filas con firma por fila), ser **solo registro** (sin criterios), **sin resultado** y con **una sola firma**.
+- La hoja suma la pestaña **RegistroFirmas** (firmas de cada fila) y las columnas «datos» y «registro» al final de Inspecciones.
+- Sin un campo «Área de la planta», las no conformidades quedan en el registro y no crean hallazgos (ni piden foto).
+- Si solo se actualiza la app, los formatos nuevos se guardarán con error hasta pegar el script; los formatos de siempre siguen funcionando.
