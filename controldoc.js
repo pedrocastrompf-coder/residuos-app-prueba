@@ -233,7 +233,7 @@ function pintaEditor(){
         ${c.tipo === "lista" ? `<input class="in" style="margin-top:6px" data-dc-f="dt.${i}.opciones" value="${esc(opc(c.opciones))}" placeholder="Opciones separadas por coma">` : ""}
         <div style="display:flex;justify-content:space-between;align-items:center"><label class="dc-chk" style="margin:6px 0 0"><input type="checkbox" data-dc="dt-req" data-i="${i}" ${c.req !== false ? "checked" : ""}> Obligatorio</label>${tools("dt", i, d.datos.length)}</div></div>`).join("") +
         (d.datos.length < 12 ? `<button type="button" class="btn sec sm" data-dc="dt-agrega">＋ Agregar campo</button>` : "") +
-        `<p class="s">${d.datos.some(c => c.tipo === "area") ? "Con un campo «Área de la planta», cada no conformidad crea un hallazgo." : "Sin un campo «Área de la planta», las no conformidades quedan en el registro, pero no crean hallazgos."}</p>`}</div>
+        (d.criterios.grupos.length ? `<p class="s">${d.datos.some(c => c.tipo === "area") ? "Con un campo «Área de la planta», cada no conformidad crea un hallazgo." : "Sin un campo «Área de la planta», las no conformidades quedan en el registro, pero no crean hallazgos."}</p>` : "")}</div>
     <div class="in-card"><h3>Tabla de puntos</h3><p class="s">Filas que agrega quien llena el formato (por ejemplo, puntos de segregación), con columnas C / NC / N/A.</p>
       <label class="dc-chk"><input type="checkbox" data-dc="puntos-usa" ${P ? "checked" : ""}> Usar tabla de puntos</label>
       ${P ? `<label class="f">Título de la tabla</label><input class="in" data-dc-f="p.titulo" maxlength="60" value="${esc(P.titulo)}">

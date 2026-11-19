@@ -13,7 +13,7 @@ const mayus = s => { const l = s.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ]/g, "
 function oracion(s){
   s = limpia(s).replace(/\n/g, " ");
   if(!mayus(s)) return s;
-  const r = s.toLowerCase().replace(/\b(ntp|fds|epp|raee|iperc|sst|sga|iso|msds|pcb|glp|n°|ph)\b/g, m => m.toUpperCase())
+  const r = s.toLowerCase().replace(/\b(ntp|fds|epp|raee|iperc|sst|sga|iso|msds|pcb|glp|n°|ph|ruc|dni|epp|mtc|minam|oefa|sunafil|iga|ppe)\b/g, m => m.toUpperCase())
     .replace(/\(([a-záéíóúñ]{2,8})\)/g, (m, x) => "(" + x.toUpperCase() + ")");   // siglas entre paréntesis
   return r.charAt(0).toUpperCase() + r.slice(1);
 }
@@ -120,13 +120,15 @@ function analizar(filas){
   }
 
   // tabla de puntos: encabezado con «punto» antes de los criterios; columnas = textos cortos de esa fila y las 2 siguientes
-  let puntos = null;
+  let puntos = null, iPun = -1;
   const lim = iCrit >= 0 ? iCrit : filas.length;
   for(let i = 0; i < lim && !puntos; i++){
     if(!filas[i].some(x => RE_PUNTO.test(x.t) && x.t.length <= 60)) continue;
+    iPun = i;
     const cel = [].concat(...filas.slice(i, Math.min(i + 3, lim))).filter(x => x.t.length >= 3 && x.t.length <= 30 && !CORTAS.test(x.t) && !RE_PUNTO.test(x.t) && !/observ/i.test(x.t) && !/^\d+$/.test(x.t));
     const vistos = {}, cols = [];
     cel.sort((a, b) => a.c - b.c).forEach(x => { const t = oracion(x.t), k = t.toLowerCase(); if(!vistos[k]){ vistos[k] = 1; cols.push(t); } });
+    if(cols.length < 2) iPun = -1;
     if(cols.length >= 2){
       puntos = {titulo:"Puntos de verificación", nota:"C = Conforme | NC = No conforme | NA = No aplica", max:8,
         columnas:cols.slice(0, 14).map((t, j) => { const col = COLORES.filter(([r]) => r.test(t))[0]; return {k:"c" + (j + 1) + Math.random().toString(36).slice(2, 6), t:t.slice(0, 30), color:col ? col[1] : ""}; })};
@@ -136,6 +138,46 @@ function analizar(filas){
       if(cols.length > 14) avisos.push("La tabla de puntos tenía más de 14 columnas: se tomaron las 14 primeras.");
     }
   }
+
+  // tabla de registro: encabezado con al menos 2 columnas típicas (nombres, DNI, firma, fecha, equipo…) que no sea la de criterios ni la de puntos
+  const REG = /apellidos|nombres?|dni|firma|cargo|empresa|equipo|cantidad|placa|tema|capacitador|^[aá]rea$|fecha( de)?|observaci|epp|talla|n[°º] de serie|descripci[oó]n/i;
+  let registro = null, iReg = -1;
+  for(let i = 0; i < filas.length && !registro; i++){
+    if(i === iCrit || (iPun >= 0 && i >= iPun && i <= iPun + 2)) continue;
+    const cel = filas[i].filter(x => !/:\s*$/.test(x.t) && x.t.length <= 40);
+    const claves = cel.filter(x => REG.test(x.t) && !/^responsable/i.test(x.t));
+    if(claves.length < 2 || cel.length < 2 || cel.length !== filas[i].length) continue;
+    const cols = [];
+    cel.forEach(x => {
+      if(/^(n[°º]|nro\.?|item|ítem|#|n\.?)$/i.test(x.t)) return;            // columna de numeración: la pone la app
+      const t = oracion(x.t).slice(0, 30), tipo = /firma/i.test(t) ? "firma" : /^fecha/i.test(t) ? "fecha" : /^hora/i.test(t) ? "hora"
+        : /cantidad|horas|peso|kg|monto|valor|edad/i.test(t) ? "numero" : /s[ií]\s*\/\s*no/i.test(t) ? "sino" : "texto";
+      cols.push({k:"r" + (cols.length + 1) + Math.random().toString(36).slice(2, 6), t:t, tipo:tipo, opciones:[], req:!/observ|coment/i.test(t)});
+    });
+    if(cols.filter(c => c.tipo === "firma").length > 1) cols.forEach((c, j) => { if(c.tipo === "firma" && cols.findIndex(x => x.tipo === "firma") !== j) c.tipo = "texto"; });
+    if(cols.length < 2) continue;
+    let nf = 0; for(let j = i + 1; j < filas.length && /^\d{1,3}$/.test((filas[j][0] || {}).t || "") && filas[j].length <= 2; j++) nf++;
+    const prev = filas[i - 1] || [];
+    const tit = prev.length === 1 && prev[0].t.length <= 60 && !/:\s*$/.test(prev[0].t) && !RE_CODIGO.test(prev[0].t) && i - 1 > 2 ? oracion(prev[0].t) : "Registro";
+    registro = {titulo:recorta(tit, 60), nota:"", max:Math.min(Math.max(nf >= 3 ? nf : 30, 1), 60), columnas:cols.slice(0, 10)};
+    if(cols.length > 10) avisos.push("La tabla de registro tenía más de 10 columnas: se tomaron las 10 primeras.");
+    iReg = i;
+  }
+
+  // datos generales: etiquetas «Algo:» del encabezado (antes de la primera tabla); fecha, hora y planta las pone la app
+  const finDatos = Math.min(...[iCrit, iPun, iReg, filas.length].filter(x => x >= 0));
+  const OMITIR = /^(c[oó]digo|versi[oó]n|fecha( de aprobaci[oó]n)?|hora|planta|p[aá]gina|responsable|inspector|firma|cargo|nombres?( y apellidos)?|elaborad|revisad|aprobad)\b/i;
+  const vistosD = {}, datos = [];
+  filas.slice(0, finDatos).forEach(f => f.forEach(x => {
+    if(!/:\s*$/.test(x.t) || x.t.length > 50) return;
+    const lab = x.t.replace(/:\s*$/, "").trim(), k = lab.toLowerCase();
+    if(OMITIR.test(lab) && !/^fecha (de|del) (?!aprobaci)/i.test(lab) || vistosD[k]) return;
+    vistosD[k] = 1;
+    const t = oracion(lab).slice(0, 40), tipo = /^[aá]rea\b/i.test(lab) ? "area" : /^fecha/i.test(lab) ? "fecha" : /^hora/i.test(lab) ? "hora"
+      : /^(n[°º]\s*(de\s*)?)?(horas|cantidad|peso|kg|trabajadores|asistentes)|^n[°º] (de )?horas/i.test(lab) ? "numero" : "texto";
+    datos.push({k:"d" + (datos.length + 1) + Math.random().toString(36).slice(2, 6), t:t, tipo:tipo, opciones:[], req:true});
+  }));
+  if(datos.filter(c => c.tipo === "area").length > 1) datos.forEach((c, j) => { if(c.tipo === "area" && datos.findIndex(x => x.tipo === "area") !== j) c.tipo = "texto"; });
 
   // criterios y grupos
   const grupos = []; let g = null, n = 0;
@@ -159,7 +201,7 @@ function analizar(filas){
     g.items.push({t:t, h:tipoHz(t0), auto:""}); n++;
   }
   const G = grupos.filter(x => x.items.length).slice(0, 8);
-  if(!G.length){ avisos.push("No se encontraron criterios: se dejó uno de ejemplo para completar en el editor."); G.push({nombre:"Criterios de inspección", items:[{t:"Escriba aquí el primer criterio", h:"Otro", auto:""}]}); }
+  if(!G.length && !registro){ avisos.push("No se encontraron criterios: se dejó uno de ejemplo para completar en el editor."); G.push({nombre:"Criterios de inspección", items:[{t:"Escriba aquí el primer criterio", h:"Otro", auto:""}]}); }
   G.forEach(x => { if(x.items.length > 20){ avisos.push("El grupo «" + x.nombre + "» tenía más de 20 criterios: se tomaron los 20 primeros."); x.items = x.items.slice(0, 20); } });
 
   // firmas: dos celdas «responsable…» en una misma fila (que no sea la de custodia)
@@ -172,23 +214,26 @@ function analizar(filas){
     const et = todas.filter(x => /^responsable\b.{3,60}:\s*$/i.test(x.t) && !/custodia/i.test(x.t)).map(x => recorta(oracion(x.t.replace(/:\s*$/, "")), 60));
     if(et.length >= 2) firmas = {insp:et[0], resp:et[1]};
   }
-  // datos generales que la app todavía no tiene como campos propios
-  const fijos = /^(planta|[aá]rea( inspeccionada)?|fecha|hora|responsable\b)/i;
-  const extra = filas.slice(0, iCrit >= 0 ? iCrit : 12).map(f => f.filter(x => /:\s*$/.test(x.t) && x.t.length <= 50 && !RE_ETIQ.test(x.t.replace(/^(planta|[aá]rea|hora|responsable)\b.*/i, "c[oó]digo")) && !fijos.test(x.t)).map(x => x.t.replace(/:\s*$/, ""))).reduce((a, b) => a.concat(b), [])
-    .filter(t => !/^(c[oó]digo|versi[oó]n|fecha de aprobaci[oó]n)$/i.test(t));
-  if(extra.length) avisos.push("Datos generales del archivo que aún no se pueden agregar como campos: " + extra.join(", ") + ". Llegan en el paso 2 (campos configurables).");
   if(iCrit >= 0 && filas[iCrit].some(x => /^s[ií]$/i.test(x.t))) avisos.push("Las respuestas SI / NO / NA del archivo se registran en la app como C / NC / NA.");
   // resultado
-  const resultado = todas.some(x => /%\s*de\s*(conformidad|cumplimiento)|calificaci[oó]n/i.test(x.t)) || iCrit >= 0
+  const resultado = !G.length ? {modo:"ninguno"} : todas.some(x => /%\s*de\s*(conformidad|cumplimiento)|calificaci[oó]n/i.test(x.t)) || iCrit >= 0
     ? {modo:"porcentaje", cortes:{sat:90, ace:70}} : {modo:"texto", titulo:"Resultados de la inspección"};
+  if(registro && !G.length){                                  // un registro lo firma quien lo lleva
+    const rr = todas.filter(x => /^responsable del registro|^capacitador|^entrenador/i.test(x.t) && !/:\s*$/.test(x.t))[0];
+    firmas = {insp:rr ? recorta(oracion(rr.t.split("\n")[0]), 60) : "Responsable del registro", resp:""};
+  }
   if(todas.some(x => /custodia/i.test(x.t))) avisos.push("Se omitió la sección de custodia del registro: en la app no se firma.");
 
   titulo = titulo || "Formato importado";
-  const def = {titulo:recorta(titulo, 80), puntos:puntos, criterios:{grupos:G}, resultado:resultado, firmas:firmas};
+  const def = {titulo:recorta(titulo, 80), datos:datos.length ? datos.slice(0, 12) : null, puntos:puntos, registro:registro, criterios:{grupos:G}, resultado:resultado, firmas:firmas};
   const nCrit = G.reduce((s, x) => s + x.items.length, 0);
-  const resumen = [nCrit + " criterio(s) en " + G.length + " grupo(s)"];
+  const resumen = [];
+  if(datos.length) resumen.push(datos.length + " dato(s) general(es): " + datos.map(c => c.t).join(", "));
+  if(registro) resumen.push("tabla «" + registro.titulo + "» con columnas " + registro.columnas.map(c => c.t + (c.tipo === "firma" ? " (firma)" : "")).join(", "));
+  if(nCrit) resumen.push(nCrit + " criterio(s) en " + G.length + " grupo(s)");
   if(puntos) resumen.push("tabla de puntos con " + puntos.columnas.length + " columnas");
-  resumen.push("resultado: " + (resultado.modo === "texto" ? "texto" : "% de cumplimiento"));
+  resumen.push("resultado: " + ({texto:"texto", porcentaje:"% de cumplimiento", ninguno:"ninguno"})[resultado.modo]);
+  if(datos.length && !datos.some(c => c.tipo === "area") && nCrit) avisos.push("No hay un campo «Área de la planta»: las no conformidades no crearán hallazgos. Puede agregarlo en el editor.");
   return {codigo:codigo, titulo:def.titulo, version:version, def:def, resumen:resumen, avisos:avisos};
 }
 
